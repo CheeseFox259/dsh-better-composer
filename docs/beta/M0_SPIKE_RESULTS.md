@@ -15,11 +15,12 @@ This was an isolated experiment, not an APPROVED_CORE_CHANGE. The temporary DSH 
 | Temporary DSH commit | `baeaf71134e116e8e471bfaae00b0d8f6e13c11b` (`test: add isolated m0 composer geometry spike`) |
 | Cleanup revert commit | `0be1067cf7` (`Revert "test: add isolated m0 composer geometry spike"`) |
 | DSH handoff HEAD | `0be1067cf7` |
+| Preservation recovery WIP commit | `34880f9cfe7686519cd4150bcd78e171074a0f21` (lint-staged backup, recovered by Sol) |
 | Plugin baseline | `50da0b4ee69846c139f42ce9d05703c04a177239` |
 | Plugin root | `/Users/superhacker/Codefield/dsh_plugins/dsh-rich-editor` |
 | Raw browser evidence | [`M0_SPIKE_RAW.json`](/Users/superhacker/Codefield/Work/Codefield/deepseek-harness/rich_editor_control/m0/M0_SPIKE_RAW.json) |
 
-The pre-spike DSH status listed six unrelated tracked modifications. At the final status check those entries were no longer reported; only the pre-existing `.dsh-eui-2/session-ui-projects.json` and `rich_editor_control/` evidence were present as untracked state. The temporary commit and its revert contain only the six spike files, and no cleanup command targeted the six unrelated paths. This preservation discrepancy is recorded as a deviation; no attempt was made to reconstruct or revert user work.
+The pre-spike DSH status listed six unrelated tracked modifications. During the hook/stash preservation incident, lint-staged left the preservation WIP as unreachable commit `34880f9cfe7686519cd4150bcd78e171074a0f21`; Sol restored these six paths byte-for-byte from that tree and verified every blob hash: `apps/cli/config/agent-presets/minimal/agent.cordis.yml`, `packages/core/system-prompt/README.i18n.yaml`, `packages/core/system-prompt/README.md`, `packages/core/system-prompt/README.zh.md`, `packages/core/system-prompt/src/index.ts`, and `packages/core/system-prompt/tests/system-prompt.spec.ts`. The temporary commit and its revert contain only the six spike files. After Sol’s recovery, no further DSH write, cleanup, restore, or commit command was run by this task.
 
 ## Implementation path exercised
 
@@ -201,7 +202,9 @@ git revert --no-edit baeaf71134e116e8e471bfaae00b0d8f6e13c11b
 
 `pnpm run clean` removed 242 repository build paths. Verification found 84 untracked compiler artifacts created by the build in nine exact source directories, with zero tracked files among them; those artifacts were removed from only those directories. The final DSH tree was checked for the six temporary paths and contains none. The plugin retains its standalone baseline, M0 documentation, fixtures, and this results report. The raw browser report remains in the control root.
 
-The final DSH status contains no tracked working-tree diff, the pre-existing `.dsh-eui-2/session-ui-projects.json`, and the pre-existing/task evidence under `rich_editor_control/`; no temporary spike file or generated artifact remains. The plugin repository is clean after recording this report.
+After Sol’s recovery, the final DSH status contains the six restored unrelated tracked modifications, the pre-existing `.dsh-eui-2/session-ui-projects.json`, and the pre-existing/task evidence under `rich_editor_control/`; no temporary spike file or generated artifact remains. The plugin repository is clean after recording this report.
+
+The hook/stash preservation incident is resolved and is not an M0 behavioral deviation. Sol performed the restoration and verified the six restored blob hashes; this task did not modify those files.
 
 ## Known limitations and risks
 
@@ -210,8 +213,6 @@ The final DSH status contains no tracked working-tree diff, the pre-existing `.d
 - The local InputBar/backdrop experiment was removed, so M1 must design the generic decoration API independently after this feasibility result. M3 must separately design the generic atomic edit API.
 - The result does not authorize a DSH Core change, a public registry, a plugin loader seam, production Markdown behavior, or any M1 feature.
 
-The missing pre-spike tracked modifications are a workspace-preservation deviation and should be reviewed before any work that depends on them. This report does not attribute their disappearance to the temporary patch without additional evidence.
-
 ## Recommended gate
 
-Accept the M0 behavioral result as **GO**, subject to Sol review of the recorded workspace-preservation deviation. All approved M0-B native baseline and M0-C Chromium normal-DPR invariants passed; the single textarea/backdrop/mirror scroll projection preserved geometry, native references remained atomic, native interactions remained usable, the deliberate projection failure failed open, and cleanup removed the temporary DSH experiment. Proceed only under Sol approval to the separately scoped M1 generic decoration-API design.
+Accept the M0 behavioral result as **GO**. All approved M0-B native baseline and M0-C Chromium normal-DPR invariants passed; the single textarea/backdrop/mirror scroll projection preserved geometry, native references remained atomic, native interactions remained usable, the deliberate projection failure failed open, cleanup removed the temporary DSH experiment, and Sol restored the unrelated user files byte-for-byte. Proceed only under Sol approval to the separately scoped M1 generic decoration-API design.
