@@ -1,6 +1,6 @@
 # RICH-EDITOR-BETA M0 Implementation Plan
 
-> **For agentic workers:** M0-A is complete. Execute M0-SPIKE only after Sol approval, and stop after the M0 gate. M1 and later milestones are outside this plan.
+> **For agentic workers:** M0-A and the approved M0-SPIKE are complete. Stop after the M0 gate; M1 and later milestones are outside this plan. See [M0_SPIKE_RESULTS.md](./M0_SPIKE_RESULTS.md) for evidence.
 
 **Goal:** Establish the native Composer baseline and determine whether the existing textarea/backdrop/mirror projection can carry geometry-safe Markdown runs without changing native behavior.
 
@@ -12,7 +12,7 @@
 
 ## M0-A — current state and plan
 
-M0-A has produced the source-backed ownership record in [BETA_CURRENT_STATE.md](./BETA_CURRENT_STATE.md), this M0-SPIKE plan, and the resolved-decision record in [DECISION_REQUESTS.md](./DECISION_REQUESTS.md). No plugin skeleton, temporary InputBar patch, geometry probe, or plugin-enabled test exists yet.
+M0-A produced the source-backed ownership record in [BETA_CURRENT_STATE.md](./BETA_CURRENT_STATE.md), this M0-SPIKE plan, and the resolved-decision record in [DECISION_REQUESTS.md](./DECISION_REQUESTS.md). The approved standalone plugin baseline and temporary M0-SPIKE evidence now exist; the temporary InputBar patch and geometry probe were removed after measurement. No plugin-enabled test exists.
 
 The DSH source baseline resolves workspace aliases to src. The real web lane first rebuilds DSH package lib artifacts and apps/web/dist, then launchWebScaffold serves the rebuilt artifact plane. The existing native baseline passed before this documentation revision; no product test or build is run as part of this revision.
 
@@ -46,8 +46,9 @@ These files are planned, not created by M0-A:
 - /Users/superhacker/Codefield/Work/Codefield/deepseek-harness/packages/client/ui-conversation/src/client/input/m0-spike-decoration.ts: temporary pure range derivation for headings, inline code, and fenced code only.
 - /Users/superhacker/Codefield/Work/Codefield/deepseek-harness/packages/client/ui-conversation/src/client/skeleton/InputBar.tsx: temporary test-only flag and local backdrop projection branch; no public prop or export.
 - /Users/superhacker/Codefield/Work/Codefield/deepseek-harness/packages/client/ui-conversation/src/client/skeleton/InputBar.module.css: temporary decoration rules limited to the allowed visual properties.
-- /Users/superhacker/Codefield/Work/Codefield/deepseek-harness/packages/client/ui-conversation/tests/m0-rich-editor-spike.client.spec.tsx: temporary exact-range, native-reference, and forbidden-style coverage.
+- /Users/superhacker/Codefield/Work/Codefield/deepseek-harness/packages/client/ui-conversation/tests/m0-rich-editor-spike.client.spec.ts: temporary exact-range, native-reference, and forbidden-style coverage.
 - /Users/superhacker/Codefield/Work/Codefield/deepseek-harness/apps/web/tests/m0-rich-editor.e2e.ts: real web-lane baseline and geometry test; it enables the temporary InputBar flag, not a plugin.
+- /Users/superhacker/Codefield/Work/Codefield/deepseek-harness/apps/web/tsconfig.json: temporary exclusion for the host-side e2e file from the client-only TypeScript project; remove with the spike.
 - /Users/superhacker/Codefield/Work/Codefield/deepseek-harness/rich_editor_control/m0/M0_SPIKE_RAW.json: isolated raw measurements if the result document needs a machine-readable companion.
 
 The plugin root may receive its standalone Git baseline, package metadata, documentation, and pure fixtures after approval, but M0 does not require a plugin loader entry or browser client. No result may be called plugin-enabled. The temporary DSH patch is isolated in one commit, and its commit hash is recorded before it is reverted.
