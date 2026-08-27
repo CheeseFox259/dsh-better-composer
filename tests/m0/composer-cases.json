@@ -1,0 +1,57 @@
+[
+  {
+    "id": "latin-short-heading",
+    "text": "# Hello world",
+    "selection": { "start": 2, "end": 2 },
+    "classes": ["heading"]
+  },
+  {
+    "id": "latin-inline-code",
+    "text": "Use `npm test` now",
+    "selection": { "start": 5, "end": 5 },
+    "classes": ["inline-code"]
+  },
+  {
+    "id": "latin-fenced-code",
+    "text": "```\nconst ready = true\n```",
+    "selection": { "start": 5, "end": 5 },
+    "classes": ["fenced-code"]
+  },
+  {
+    "id": "cjk-mixed-emoji-wrap",
+    "text": "标题 mixed 文本 😀 and a deliberately long line for soft wrapping",
+    "selection": { "start": 9, "end": 18 },
+    "classes": []
+  },
+  {
+    "id": "japanese-short-line",
+    "text": "見出しと日本語",
+    "selection": { "start": 3, "end": 3 },
+    "classes": []
+  },
+  {
+    "id": "emoji-short-line",
+    "text": "Status: ✅ 🧪 🚀",
+    "selection": { "start": 8, "end": 8 },
+    "classes": []
+  },
+  {
+    "id": "long-multiline",
+    "text": "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nline 20\nline 21\nline 22\nline 23\nline 24\nline 25\nline 26\nline 27\nline 28\nline 29\nline 30\nline 31\nline 32\nline 33\nline 34\nline 35\nline 36\nline 37\nline 38\nline 39\nline 40",
+    "selection": { "start": 0, "end": 0 },
+    "classes": []
+  },
+  {
+    "id": "native-reference",
+    "text": "Review @src/app.ts and `code`",
+    "selection": { "start": 7, "end": 18 },
+    "classes": ["inline-code"],
+    "nativeReference": { "start": 7, "end": 18 }
+  },
+  {
+    "id": "trailing-newlines",
+    "text": "line one\nline two\n\n",
+    "selection": { "start": 20, "end": 20 },
+    "classes": []
+  }
+]

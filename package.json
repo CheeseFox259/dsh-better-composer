@@ -1,0 +1,12 @@
+{
+  "name": "@deepseek-ai/dsh-rich-editor",
+  "version": "0.0.0-m0",
+  "private": true,
+  "description": "M0 geometry-feasibility control artifacts for the DSH Rich Editor Beta.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "files": [
+    "docs/beta",
+    "tests/m0"
+  ]
+}
