@@ -6,7 +6,8 @@ Status: acceptance evidence is complete for the automated Beta gate. The only us
 
 - Base: `bd5a03c09f62e85fb779e8347b1816a19b16a18e`.
 - Core commits: `9869e8e56e1fadc2bbc1e50690c35c4a2b86e2f9` (generic seam and Beta support), `0e66075a87a7a448dc36447cb991b6bed77402b` (runtime narrowing fix).
-- Plugin implementation/docs commit: `cfecc0d` (`feat: deliver markdown composer beta`). The final evidence record is a separate documentation commit.
+- Plugin implementation/docs commit: `cfecc0d0b1de2e11ba2946087c6910f70e6afd68` (`feat: deliver markdown composer beta`).
+- Final evidence commit: `eefa8b780609c8881e44920070fdeb796e2bb28f` (`docs: record final beta acceptance evidence`).
 - Work roots are represented by `$DSH_CORE_WORKTREE` and `$PLUGIN_ROOT`; no persistent result or source file requires a local absolute path.
 
 The Core change is limited to the approved generic decoration hardening, `parseGfm()` export, pure composer actions, InputBar action execution/shortcut arbitration, and the session-scoped `conversation.input.editor` owner. Markdown parsing, masking, commands, toolbar, preview, diagnostics, and decoration CSS remain in the plugin.
