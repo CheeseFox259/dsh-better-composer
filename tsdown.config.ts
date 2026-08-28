@@ -1,13 +1,10 @@
 import type { UserConfig } from 'tsdown'
-import { fileURLToPath } from 'node:url'
 
 const PACKAGE_ID = '@deepseek-ai/dsh-rich-editor'
-const PACKAGE_ROOT = fileURLToPath(new URL('.', import.meta.url))
-
 const nodeConfig: UserConfig = {
   name: PACKAGE_ID,
-  entry: [`${PACKAGE_ROOT}/lib/types/index.js`],
-  outDir: `${PACKAGE_ROOT}/lib`,
+  entry: ['src/index.ts'],
+  outDir: 'lib',
   format: ['esm'],
   platform: 'node',
   target: 'es2024',
@@ -18,15 +15,14 @@ const nodeConfig: UserConfig = {
 
 const clientConfig: UserConfig = {
   name: `${PACKAGE_ID}/client`,
-  entry: { client: `${PACKAGE_ROOT}/src/client/index.ts` },
-  outDir: `${PACKAGE_ROOT}/lib`,
+  entry: { client: 'src/client/index.ts' },
+  outDir: 'lib',
   format: 'cjs',
   platform: 'browser',
   target: 'es2024',
   dts: false,
   sourcemap: true,
   clean: false,
-  deps: { alwaysBundle: () => true },
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
   },

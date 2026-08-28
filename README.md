@@ -1,9 +1,7 @@
 # `@deepseek-ai/dsh-rich-editor`
 
-This standalone out-of-tree package is the M1 capability adapter for the generic composer decoration registry. Its client entry registers providers through `ctx.conversation.decorations` and unwinds those registrations through adapter fiber effects. The range-producing probe and throwing provider activate only when the assembled M1 browser smoke sets its private test flag; normal loading contributes no visible range.
+Standalone client contribution for the generic DSH composer faces. The client registers one synchronous decoration provider, eleven pure formatting actions, and the session-scoped `conversation.input.editor` slot.
 
-The adapter has no Markdown parser or product presentation. It does not read or mutate editor DOM, own draft state, serialize prompts, edit occurrences, or handle keyboard, selection, IME, or scrolling. Those responsibilities remain with DSH Core and the InputMachine.
+The provider reuses DSH `parseGfm()` and `MarkdownText`. It returns only UTF-16 half-open visual ranges for headings, emphasis, code, quotes, lists, links, and strike-through text, plus the three approved diagnostics. Actions return one `ComposerEditResult`; InputBar owns validation, the InputMachine transaction, native occurrences, selection, IME, keyboard arbitration, scrolling, and submission.
 
-## Model Experience
-
-None. This package contributes visual client projection only and does not reach model requests.
+The package never reads or mutates editor DOM, serializes prompts, or owns a second editor. Its production registration is effect-scoped and each disposer is retained independently, so removing the package restores the native composer. Build with the package scripts and provide the DSH client peer packages at runtime.

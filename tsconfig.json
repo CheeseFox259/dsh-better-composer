@@ -1,16 +1,19 @@
 {
-  "extends": "/Users/superhacker/Codefield/Work/Codefield/deepseek-harness-rich-editor-m1/tsconfig.base.client.json",
   "compilerOptions": {
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "noImplicitAny": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["node", "react"],
+    "verbatimModuleSyntax": true,
+    "rewriteRelativeImportExtensions": true,
     "rootDir": "src",
     "outDir": "lib/types",
-    "paths": {
-      "@deepseek-ai/dsh-client-ui-conversation/client": [
-        "/Users/superhacker/Codefield/Work/Codefield/deepseek-harness-rich-editor-m1/packages/client/ui-conversation/lib/types/client/index.d.ts"
-      ],
-      "@deepseek-ai/dsh-client-runtime/client": [
-        "/Users/superhacker/Codefield/Work/Codefield/deepseek-harness-rich-editor-m1/packages/client/runtime/lib/types/client/index.d.ts"
-      ]
-    }
+    "noEmit": false
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts"]
 }

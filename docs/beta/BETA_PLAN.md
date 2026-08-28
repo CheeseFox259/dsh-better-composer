@@ -57,7 +57,7 @@ Paths are symbols rooted at execution time; no symbol or local absolute path is 
 - `$DSH_CORE_WORKTREE/packages/client/ui-conversation/tests/input-decoration.client.spec.tsx` — one InputBar matrix: zero/single provider, native occurrence, late disposal, IME, Enter/Queue/Steer, undo/redo, and one action application.
 - `$DSH_CORE_WORKTREE/packages/client/ui-conversation/tests/input-bar.client.spec.tsx`, `input-matrix.client.spec.tsx`, `input-scenarios.client.spec.tsx`, `skeleton.client.spec.tsx`, and `apply-inject.client.spec.tsx` — update private fixtures only.
 - `$DSH_CORE_WORKTREE/packages/test-support/composer-decoration-fixture/package.json`, `tsconfig.json`, `tsdown.config.ts`, `src/index.ts`, and `src/client/index.ts` — self-contained test-only healthy/throwing providers for the Core browser smoke; never production and never plugin-dependent.
-- `$DSH_CORE_WORKTREE/apps/web/tests/composer-decoration.e2e.ts` and `composer-decoration.fixture.overlay.yml` — one assembled Chromium test and repository-local fixture overlay, with no external checkout or smoke global.
+- `$DSH_CORE_WORKTREE/apps/web/tests/composer-decoration.e2e.ts` and `composer-decoration.fixture.overlay.yml` — one assembled Chromium test and repository-local fixture overlay. The default test loads only the repository fixture; the clean-install acceptance command may set `DSH_RICH_EDITOR_PACKAGE` to an installed package and the test writes its overlay under its temporary harness home.
 - `$DSH_CORE_WORKTREE/apps/web/tsconfig.json`, `tsconfig.host.json`, and `tsconfig.client.json` — preserve host/client project boundaries and remove the prior `TS6059`/`TS6307` crossing.
 - `$DSH_CORE_WORKTREE/docs/architecture.md`, `docs/architecture.zh.md`, `packages/client/ui-conversation/README.md`, `packages/client/ui-conversation/README.zh.md`, and paired Agent Note files — document generic ownership, action purity, lifecycle, and fail-open behavior in both languages.
 
@@ -67,8 +67,8 @@ Paths are symbols rooted at execution time; no symbol or local absolute path is 
 - `$PLUGIN_ROOT/tsconfig.json`, `$PLUGIN_ROOT/vitest.config.ts`, `$PLUGIN_ROOT/tsdown.config.ts` — retain, remove absolute worktree references, and use only relative/package dependencies.
 - `$PLUGIN_ROOT/src/client/index.ts` — effect-register exactly the production decoration/action/slot contributions; no smoke globals or throwing production provider.
 - `$PLUGIN_ROOT/src/client/decoration-provider.ts` — adapter around the pure Markdown provider.
-- `$PLUGIN_ROOT/src/markdown/parser.ts`, `ast-ranges.ts`, `native-mask.ts`, `diagnostics.ts`, and `provider.ts` — `parseGfm()`/MDAST position mapping, native masking, the three diagnostics, and pure provider output.
-- `$PLUGIN_ROOT/src/commands/actions.ts`, `action-transforms.ts`, `toolbar.tsx`, `preview.tsx`, and `styles.module.css` — complete command set, toolbar, read-only preview, and geometry-safe CSS.
+- `$PLUGIN_ROOT/src/markdown/ast-ranges.ts`, `native-mask.ts`, `diagnostics.ts`, and `provider.ts` — `parseGfm()`/MDAST position mapping, native masking, the three diagnostics, and pure provider output.
+- `$PLUGIN_ROOT/src/commands/actions.ts`, `action-transforms.ts`, `$PLUGIN_ROOT/src/client/editor.tsx`, `styles.ts`, and `styles.css` — complete command set, toolbar, read-only preview, stylesheet lifecycle, and geometry-safe CSS.
 - `$PLUGIN_ROOT/tests/unit/parser.client.spec.ts`, `action-transform.client.spec.ts`, `diagnostics.client.spec.ts`, `registry-lifecycle.client.spec.ts`, and `performance.client.spec.ts` — focused unit/action/diagnostic/lifecycle tests and only 1k/10k/50k performance measurements.
 - `$PLUGIN_ROOT/tests/m1/decoration-adapter.client.spec.ts` and `tests/m1/composer-decoration.overlay.yml` — production-registration cleanup proof and portable installed-package overlay.
 - `$PLUGIN_ROOT/README.md` and `docs/beta/M1_RESULTS.md` — concise consumer contract and final evidence; no test-orchestration history or machine paths.
@@ -133,7 +133,7 @@ return mapGfmPositions(tree, context.draft.length)
 interface ComposerActionContext {
   readonly draft: string
   readonly draftRev: number
-  readonly selection: EditSelection
+  readonly selection: ComposerActionSelection
   readonly nativeRanges: readonly ComposerNativeRange[]
 }
 
@@ -148,6 +148,7 @@ interface ComposerEditResult {
 interface ComposerAction {
   readonly id: string
   readonly order?: number
+  readonly shortcut?: ComposerActionShortcut
   transform(context: ComposerActionContext): ComposerEditResult | undefined
 }
 

@@ -2,7 +2,7 @@
   "name": "@deepseek-ai/dsh-rich-editor",
   "version": "0.0.0-m1",
   "private": true,
-  "description": "Out-of-tree client adapter for the generic DSH composer decoration registry.",
+  "description": "Portable Markdown composer contribution for the generic DSH composer faces.",
   "type": "module",
   "license": "UNLICENSED",
   "main": "lib/index.js",
@@ -26,7 +26,11 @@
     }
   },
   "scripts": {
-    "bundle": "tsc -p tsconfig.json && tsdown"
+    "bundle": "tsc -p tsconfig.json && tsdown",
+    "build": "pnpm run bundle",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "pack:check": "pnpm pack --pack-destination .pack-check"
   },
   "files": [
     "lib/index.js",
@@ -36,5 +40,23 @@
     "docs/beta",
     "tests/m0",
     "tests/m1"
-  ]
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/dsh-client-ui-conversation": ">=0.0.1-rc.1",
+    "@deepseek-ai/dsh-client-runtime": ">=0.0.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.0.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.0.1-rc.1",
+    "@deepseek-ai/cordis": "^4.0.1",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@tsdown/css": "^0.22.14",
+    "@types/mdast": "^4.0.4",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "react": "^18.2.0",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.0"
+  }
 }

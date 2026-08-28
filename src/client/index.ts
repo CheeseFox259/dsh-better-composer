@@ -1,20 +1,22 @@
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { createDecorationProvider, createThrowingSmokeProvider } from './decoration-provider.ts'
+import { createDecorationProvider } from './decoration-provider.ts'
+import { composerActions } from '../commands/actions.ts'
+import { EditorContribution } from './editor.tsx'
+import { installStyles } from './styles.ts'
 
-/** Required client service for the adapter's public registration face. */
-export const inject = ['conversation']
+/** Required client services for the generic composer contribution. */
+export const inject = ['conversation', 'slots']
 
-/** Register the provider through the public conversation service and its fiber lifecycle. */
+/** Register production contributions through independent effect-owned disposers. */
 export function apply(ctx: ClientContext): void {
+  installStyles(ctx)
   const provider = createDecorationProvider()
-  ctx.effect(
-    () => ctx.conversation.decorations.register(provider),
-    'dsh-rich-editor: composer decoration provider',
-  )
-  const smokeProvider = createThrowingSmokeProvider()
-  ctx.effect(
-    () => ctx.conversation.decorations.register(smokeProvider),
-    'dsh-rich-editor: M1 smoke provider',
-  )
+  ctx.effect(() => {
+    const disposers: Array<() => void> = []
+    disposers.push(ctx.conversation.decorations.register(provider))
+    for (const action of composerActions) disposers.push(ctx.conversation.actions.register(action))
+    disposers.push(ctx.slots.register({ name: 'conversation.input.editor' }, EditorContribution))
+    return () => { for (const dispose of disposers.reverse()) dispose() }
+  }, 'dsh-rich-editor: composer contributions')
 }
