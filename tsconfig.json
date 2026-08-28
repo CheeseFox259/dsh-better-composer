@@ -1,0 +1,16 @@
+{
+  "extends": "/Users/superhacker/Codefield/Work/Codefield/deepseek-harness-rich-editor-m1/tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "paths": {
+      "@deepseek-ai/dsh-client-ui-conversation/client": [
+        "/Users/superhacker/Codefield/Work/Codefield/deepseek-harness-rich-editor-m1/packages/client/ui-conversation/lib/types/client/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-client-runtime/client": [
+        "/Users/superhacker/Codefield/Work/Codefield/deepseek-harness-rich-editor-m1/packages/client/runtime/lib/types/client/index.d.ts"
+      ]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

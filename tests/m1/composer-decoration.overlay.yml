@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-rich-editor
+      name: '@deepseek-ai/dsh-rich-editor'

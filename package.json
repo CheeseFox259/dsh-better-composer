@@ -1,12 +1,40 @@
 {
   "name": "@deepseek-ai/dsh-rich-editor",
-  "version": "0.0.0-m0",
+  "version": "0.0.0-m1",
   "private": true,
-  "description": "M0 geometry-feasibility control artifacts for the DSH Rich Editor Beta.",
+  "description": "Out-of-tree client adapter for the generic DSH composer decoration registry.",
   "type": "module",
   "license": "UNLICENSED",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation"],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "bundle": "tsc -p tsconfig.json && tsdown"
+  },
   "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/types/**/*.d.ts",
+    "README.md",
     "docs/beta",
-    "tests/m0"
+    "tests/m0",
+    "tests/m1"
   ]
 }
