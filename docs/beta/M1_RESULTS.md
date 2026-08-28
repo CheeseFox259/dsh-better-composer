@@ -1,27 +1,108 @@
-# RICH-EDITOR-BETA M1 candidate record
+# RICH-EDITOR-BETA final Beta evidence
 
-This is a candidate record, not a final M1 or Beta gate. The candidate proves the initial generic decoration registry and an out-of-tree adapter, but the Sol rework was interrupted before its eight acceptance blockers were cleared.
+Status: acceptance evidence is complete for the automated Beta gate. The only user-run item is real Chinese or Japanese OS IME input.
 
-## Candidate identity
+## Identity and scope
 
-- DSH base: `bd5a03c09f62e85fb779e8347b1816a19b16a18e`.
-- Core candidate: `0e7e996863f49bd947fe65f501389b1afb8f15b1`, `feat(ui-conversation): add generic composer decoration seam`.
-- Plugin candidate: `5a88590dff3a29f1213e8aeee22f33aa0295bf17`, with documentation records `ec5e46faf96ad72bd2740bf6f5cdd55e536b8559` and `f4978ed77448a7826ec9eaae1f6fa0f71929edfb`.
-- Implementation roots are represented by `$DSH_CORE_WORKTREE` and `$PLUGIN_ROOT`; no result record depends on a local absolute path.
+- Base: `bd5a03c09f62e85fb779e8347b1816a19b16a18e`.
+- Core commits: `9869e8e56e1fadc2bbc1e50690c35c4a2b86e2f9` (generic seam and Beta support), `0e66075a87a7a448dc36447cb991b6bed77402b` (runtime narrowing fix).
+- Plugin implementation/docs commit: `cfecc0d` (`feat: deliver markdown composer beta`). The final evidence record is a separate documentation commit.
+- Work roots are represented by `$DSH_CORE_WORKTREE` and `$PLUGIN_ROOT`; no persistent result or source file requires a local absolute path.
 
-## Carried evidence
+The Core change is limited to the approved generic decoration hardening, `parseGfm()` export, pure composer actions, InputBar action execution/shortcut arbitration, and the session-scoped `conversation.input.editor` owner. Markdown parsing, masking, commands, toolbar, preview, diagnostics, and decoration CSS remain in the plugin.
 
-The candidate exercised the generic provider/context/range registry, native clipping, surrogate-boundary validation, representative overlap composition, per-provider fail-open diagnostics, native backdrop preservation, and a Chromium assembled smoke. M0’s full geometry and native-interaction result remains the authoritative feasibility evidence.
+## Implemented user flow
 
-## Required rework before acceptance
+The installed plugin contributes heading, strong, emphasis, inline code, fenced code, quote, bullet, ordered, task, link, and strike-through decorations; the eleven required actions are Strong, Emphasis, Inline Code, Link, Quote, Bullet, Ordered, Task, Code Fence, Indent, and Outdent. Toolbar and keyboard shortcuts produce one pure edit result, which InputBar applies as one native draft transaction and undo unit. Preview is read-only, expanded mode reuses the existing textarea/backdrop/mirror/scrollport, and diagnostics cover only unclosed fences, unclosed inline-code delimiter runs, and malformed explicit links.
 
-1. Make the Core assembled smoke self-contained with an in-repository test-only fixture/provider.
-2. Remove personal/absolute paths from source, docs, and packaging records.
-3. Remove production smoke globals/providers and prove every production registration disposes independently during fiber cleanup.
-4. Keep normalized segments and collector/render types internal to `ui-conversation`.
-5. Replace the boundaries-by-ranges composition scan with a sorted event sweep and deterministic non-overlap guard.
-6. Correct the host/client project boundary so `build:lib:host` and `build:lib:client` both pass.
-7. Pair English/Chinese architecture documentation and keep the Agent Note/README free of orchestration history.
-8. Remove standalone path-bound config files and make package scripts/dependencies portable.
+Native references remain atomic and authoritative. Provider throws or invalid ranges fail open for that provider/action, with injected developer diagnostics and no user-facing error. Zero providers retains the native projection and keyboard behavior.
 
-The one-pass plan in [BETA_PLAN.md](./BETA_PLAN.md) is the execution authority for these corrections and the remaining Beta product work. No final gate is claimed here.
+## Checks and results
+
+Commands were run from the corresponding repository root.
+
+Core source and artifact checks:
+
+```text
+pnpm exec vitest run packages/client/ui-conversation/tests/apply-inject.client.spec.tsx packages/client/ui-conversation/tests/input-bar.client.spec.tsx packages/client/ui-conversation/tests/input-decoration.client.spec.tsx packages/client/ui-conversation/tests/input-matrix.client.spec.tsx packages/client/ui-conversation/tests/input-scenarios.client.spec.tsx packages/client/ui-conversation/tests/skeleton.client.spec.tsx packages/client/ui-conversation/tests/composer-action.client.spec.ts packages/client/ui-conversation/tests/composer-decoration.client.spec.ts --reporter=dot
+8 files, 146 tests passed
+pnpm run build:lib:host
+passed
+pnpm run build:lib:client
+passed
+pnpm exec tsx scripts/run-oxlint.ts .
+passed
+```
+
+The client build initially exposed two type-narrowing errors in the final runtime-check cleanup; both were corrected before the final Core commit and the client build then passed.
+
+Plugin checks:
+
+```text
+pnpm test -- --reporter=dot
+6 files, 8 tests passed
+pnpm run typecheck
+passed
+pnpm run bundle
+passed; lib/index.js 0.15 kB, lib/client.js 14.75 kB
+pnpm run pack:check
+passed; tarball contains lib, README, beta docs, and focused tests only
+```
+
+The plugin performance budget test recorded approximately 4.21 ms for 1k, 5.79 ms for 10k, and 21.36 ms for 50k draft projection on the test machine. These are budget observations, not a machine-specific threshold.
+
+Documentation and hygiene checks:
+
+```text
+pnpm run doc-sync
+passed
+pnpm run verify-export-jsdoc
+passed
+pnpm run verify-translation-pairing
+passed
+git diff --check
+passed
+```
+
+## Assembled and real-runtime evidence
+
+The self-contained Core fixture and the clean-installed plugin both ran through the assembled Chromium web lane:
+
+```text
+pnpm exec vitest run --config vitest.web.config.ts apps/web/tests/composer-decoration.e2e.ts --reporter=dot
+1 file, 1 test passed (repository fixture)
+DSH_RICH_EDITOR_PACKAGE=<clean-installed-package> pnpm exec vitest run --config vitest.web.config.ts apps/web/tests/composer-decoration.e2e.ts --reporter=dot
+1 file, 1 test passed (clean-installed plugin package)
+```
+
+The clean-installed flow exercised installation, mixed Markdown/CJK/emoji/reference input, native reference preservation, decoration, Strong toolbar action, Control+B arbitration, read-only Preview, same-textarea expanded mode, unclosed-fence diagnostics, and native submit. The decorated/control geometry record was:
+
+```json
+{"input":{"clientHeight":172,"clientWidth":778,"height":172,"scrollHeight":172,"width":778},"backdrop":{"clientHeight":172,"clientWidth":778,"height":172,"scrollHeight":172,"width":778},"mirror":{"clientHeight":172,"clientWidth":778,"height":172,"scrollHeight":172,"width":778},"scroll":{"clientHeight":172,"clientWidth":778,"height":172,"scrollHeight":172,"width":778}}
+```
+
+The self-contained fixture also exercised a throwing provider. The browser run recorded no page errors, the native reference remained visible, typing and Enter submit remained usable, and the provider failure did not remove the native composer.
+
+The real DSH web smoke was run from the built isolated Core artifacts:
+
+```text
+DSH_HOME=<temporary-home> pnpm dsh web --no-open --port 0
+curl -sS -o /dev/null -w 'HTTP_CODE=%{http_code}\n' <reported-url>
+HTTP_CODE=200
+```
+
+The launched web process tree was stopped after the HTTP check and no matching DSH web process remained. The clean-installed package emitted only expected missing-peer warnings in its empty temporary install; the assembled DSH run supplied the host peers.
+
+## Cleanup and repository integrity
+
+- The Core worktree and plugin repository are clean after their final commits.
+- No temporary DSH injection, smoke global, production throwing provider, second editor, or second scroll layer remains.
+- The plugin tarball is portable: its configs use package dependencies and relative paths, and its source/docs contain no personal checkout path.
+- The shared DSH checkout was not written, built, cleaned, restored, or committed during this implementation. Its six pre-existing tracked user-file blob hashes and `rich_editor_control` were preserved; its original dirty status remains unchanged.
+- The earlier M0 hook/stash preservation incident and Sol recovery remain recorded in the M0 evidence; no new preservation incident occurred in this pass.
+
+## Limitations and gate
+
+Automated Beta deliberately does not add fuzzing, exhaustive overlap permutations, extreme-length matrices, leak loops, full-repository tests, full coverage, WebKit, Firefox, or repeated geometry suites. Those checks are outside the minimal contract. Real Chinese/Japanese OS IME behavior is `USER_RUN_REQUIRED`; it is the only deferred Beta check and does not block the automated gate.
+
+Recommended decision: `BUILD_STABLE` for Sol review. No automated Beta feature remains incomplete.
