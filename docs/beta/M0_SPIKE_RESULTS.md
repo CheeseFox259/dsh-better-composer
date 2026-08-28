@@ -17,8 +17,8 @@ This was an isolated experiment, not an APPROVED_CORE_CHANGE. The temporary DSH 
 | DSH handoff HEAD | `0be1067cf7` |
 | Preservation recovery WIP commit | `34880f9cfe7686519cd4150bcd78e171074a0f21` (lint-staged backup, recovered by Sol) |
 | Plugin baseline | `50da0b4ee69846c139f42ce9d05703c04a177239` |
-| Plugin root | `/Users/superhacker/Codefield/dsh_plugins/dsh-rich-editor` |
-| Raw browser evidence | [`M0_SPIKE_RAW.json`](/Users/superhacker/Codefield/Work/Codefield/deepseek-harness/rich_editor_control/m0/M0_SPIKE_RAW.json) |
+| Plugin root | `$PLUGIN_ROOT` (standalone out-of-tree repository) |
+| Raw browser evidence | `rich_editor_control/m0/M0_SPIKE_RAW.json` in the preserved control evidence |
 
 The pre-spike DSH status listed six unrelated tracked modifications. During the hook/stash preservation incident, lint-staged left the preservation WIP as unreachable commit `34880f9cfe7686519cd4150bcd78e171074a0f21`; Sol restored these six paths byte-for-byte from that tree and verified every blob hash: `apps/cli/config/agent-presets/minimal/agent.cordis.yml`, `packages/core/system-prompt/README.i18n.yaml`, `packages/core/system-prompt/README.md`, `packages/core/system-prompt/README.zh.md`, `packages/core/system-prompt/src/index.ts`, and `packages/core/system-prompt/tests/system-prompt.spec.ts`. The temporary commit and its revert contain only the six spike files. After Sol’s recovery, no further DSH write, cleanup, restore, or commit command was run by this task.
 
