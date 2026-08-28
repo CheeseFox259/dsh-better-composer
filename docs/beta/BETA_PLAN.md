@@ -24,6 +24,7 @@ DSH Core is implemented only in the isolated worktree `/Users/superhacker/Codefi
 - `packages/client/ui-conversation/tests/input-decoration.client.spec.tsx`
 - Existing direct InputBar fixtures receive the new private hook/collector: `tests/input-bar.client.spec.tsx`, `tests/input-matrix.client.spec.tsx`, `tests/input-scenarios.client.spec.tsx`, and `tests/skeleton.client.spec.tsx`.
 - `docs/architecture.md` and `.agents/notes/implemented/architecture/2026-08-28-generic-composer-decoration-seam.md` document the extension point and shipped ownership.
+- `tsconfig.host.json` and `apps/web/tsconfig.json` register the assembled smoke in the repository's host/client project split.
 
 The standalone plugin root `/Users/superhacker/Codefield/dsh_plugins/dsh-rich-editor` contains the thin `src/client` adapter, package metadata, README, and `tests/m1/decoration-adapter.client.spec.ts`.
 
