@@ -1,13 +1,14 @@
 # RICH-EDITOR-BETA final Beta evidence
 
-Status: acceptance evidence is complete for the automated Beta gate. The only user-run item is real Chinese or Japanese OS IME input.
+Status: Sol accepted the automated Beta gate. The only user-run item is real Chinese or Japanese OS IME input.
 
 ## Identity and scope
 
 - Base: `bd5a03c09f62e85fb779e8347b1816a19b16a18e`.
-- Core commits: `9869e8e56e1fadc2bbc1e50690c35c4a2b86e2f9` (generic seam and Beta support), `0e66075a87a7a448dc36447cb991b6bed77402b` (runtime narrowing fix).
+- Core commits: `9869e8e56e1fadc2bbc1e50690c35c4a2b86e2f9` (generic seam and Beta support), `0e66075a87a7a448dc36447cb991b6bed77402b` (runtime narrowing fix), and `406d11f2dd543c5152887e1340be25da15a0200b` (native shortcut arbitration and final acceptance coverage).
 - Plugin implementation/docs commit: `cfecc0d0b1de2e11ba2946087c6910f70e6afd68` (`feat: deliver markdown composer beta`).
 - Evidence commits: `eefa8b780609c8881e44920070fdeb796e2bb28f` (`docs: record final beta acceptance evidence`) and `e20e37b4a4552c4cf22551a922e367d05b801238` (explicit commit IDs).
+- Sol lifecycle hardening commit: `b1b1f78a7b4c702a78741eeb8422c8f4fb595356`.
 - Work roots are represented by `$DSH_CORE_WORKTREE` and `$PLUGIN_ROOT`; no persistent result or source file requires a local absolute path.
 
 The Core change is limited to the approved generic decoration hardening, `parseGfm()` export, pure composer actions, InputBar action execution/shortcut arbitration, and the session-scoped `conversation.input.editor` owner. Markdown parsing, masking, commands, toolbar, preview, diagnostics, and decoration CSS remain in the plugin.
@@ -52,6 +53,8 @@ passed; tarball contains lib, README, beta docs, and focused tests only
 
 The plugin performance budget test recorded approximately 4.21 ms for 1k, 5.79 ms for 10k, and 21.36 ms for 50k draft projection on the test machine. These are budget observations, not a machine-specific threshold.
 
+Sol's independent run recorded approximately 7.57 ms for 1k, 10.68 ms for 10k, and 27.84 ms for 50k. The Core shortcut tests reject unmodified and native-reserved chords, and the InputBar integration test proves registered actions remain inactive during IME composition. Plugin registrations now give each provider, action, and slot its own effect-owned disposer; the command table checks the expected replacement text for all eleven actions.
+
 Documentation and hygiene checks:
 
 ```text
@@ -82,6 +85,8 @@ The clean-installed flow exercised installation, mixed Markdown/CJK/emoji/refere
 {"input":{"clientHeight":172,"clientWidth":778,"height":172,"scrollHeight":172,"width":778},"backdrop":{"clientHeight":172,"clientWidth":778,"height":172,"scrollHeight":172,"width":778},"mirror":{"clientHeight":172,"clientWidth":778,"height":172,"scrollHeight":172,"width":778},"scroll":{"clientHeight":172,"clientWidth":778,"height":172,"scrollHeight":172,"width":778}}
 ```
 
+The final flow also filled a 40-line draft, marked the resident textarea, expanded the Composer, and asserted both a larger scrollport client height and the same textarea identity.
+
 The self-contained fixture also exercised a throwing provider. The browser run recorded no page errors, the native reference remained visible, typing and Enter submit remained usable, and the provider failure did not remove the native composer.
 
 The real DSH web smoke was run from the built isolated Core artifacts:
@@ -106,4 +111,4 @@ The launched web process tree was stopped after the HTTP check and no matching D
 
 Automated Beta deliberately does not add fuzzing, exhaustive overlap permutations, extreme-length matrices, leak loops, full-repository tests, full coverage, WebKit, Firefox, or repeated geometry suites. Those checks are outside the minimal contract. Real Chinese/Japanese OS IME behavior is `USER_RUN_REQUIRED`; it is the only deferred Beta check and does not block the automated gate.
 
-Recommended decision: `BUILD_STABLE` for Sol review. No automated Beta feature remains incomplete.
+Decision: `BETA_ACCEPTED`. No automated Beta feature remains incomplete.
