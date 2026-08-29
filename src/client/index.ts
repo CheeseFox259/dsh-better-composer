@@ -12,11 +12,12 @@ export const inject = ['conversation', 'slots']
 export function apply(ctx: ClientContext): void {
   installStyles(ctx)
   const provider = createDecorationProvider()
-  ctx.effect(() => {
-    const disposers: Array<() => void> = []
-    disposers.push(ctx.conversation.decorations.register(provider))
-    for (const action of composerActions) disposers.push(ctx.conversation.actions.register(action))
-    disposers.push(ctx.slots.register({ name: 'conversation.input.editor' }, EditorContribution))
-    return () => { for (const dispose of disposers.reverse()) dispose() }
-  }, 'dsh-rich-editor: composer contributions')
+  ctx.effect(() => ctx.conversation.decorations.register(provider), 'dsh-rich-editor: markdown decorations')
+  for (const action of composerActions) {
+    ctx.effect(() => ctx.conversation.actions.register(action), `dsh-rich-editor: action ${action.id}`)
+  }
+  ctx.effect(
+    () => ctx.slots.register({ name: 'conversation.input.editor' }, EditorContribution),
+    'dsh-rich-editor: editor controls',
+  )
 }

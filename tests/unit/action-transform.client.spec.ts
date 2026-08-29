@@ -7,13 +7,20 @@ const context = (draft: string, start: number, end: number): ComposerActionConte
 })
 
 describe('composer actions', () => {
-  it('returns one selection-preserving result for every Beta command', () => {
+  it('returns the expected single replacement for every Beta command', () => {
     const draft = 'one\ntwo'
+    const expected: Readonly<Record<string, string>> = {
+      strong: '**one\ntwo**', emphasis: '*one\ntwo*', 'inline-code': '`one\ntwo`',
+      link: '[one\ntwo](url)', quote: '> one\n> two', bullet: '- one\n- two',
+      ordered: '1. one\n1. two', task: '- [ ] one\n- [ ] two',
+      'code-fence': '```\none\ntwo\n```', indent: '    one\n    two', outdent: 'one\ntwo',
+    }
     for (const action of composerActions) {
       const result = action.transform(context(draft, 0, draft.length))
       expect(result, action.id).toBeDefined()
       expect(result?.start).toBe(0)
       expect(result?.end).toBe(draft.length)
+      expect(result?.text, action.id).toBe(expected[action.id])
       expect(result?.selectionEnd).toBeGreaterThanOrEqual(result?.selectionStart ?? 0)
     }
   })
