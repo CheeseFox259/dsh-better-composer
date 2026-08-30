@@ -1,8 +1,11 @@
 .dsh-rich-editor-editor { display: flex; flex-direction: column; gap: 6px; padding: 0 12px; }
-.dsh-rich-editor-toolbar { display: flex; flex-wrap: wrap; gap: 4px; }
+.dsh-rich-editor-toolbar { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.dsh-rich-editor-more { position: relative; }
+.dsh-rich-editor-more-menu { position: absolute; z-index: 1; display: grid; gap: 4px; min-width: 120px; padding: 6px; border: 1px solid var(--dsw-alias-border-l2-darkmode-thin); border-radius: 6px; background: var(--dsw-alias-bg-layer-1); }
 .dsh-rich-editor-button { border: 1px solid var(--dsw-alias-border-l2-darkmode-thin); border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; font-size: 12px; padding: 3px 6px; }
 .dsh-rich-editor-button:hover { background-color: var(--dsw-alias-interactive-bg-hover); }
 .dsh-rich-editor-preview { padding: 4px 0; }
+.dsh-rich-editor-diagnostics { margin: 0; padding: 0; color: var(--dsw-alias-state-error-primary); font-size: 12px; list-style: none; }
 .dsh-rich-editor-heading { color: var(--dsw-alias-label-primary); }
 .dsh-rich-editor-strong { color: var(--dsw-alias-label-primary); }
 .dsh-rich-editor-emphasis { color: var(--dsw-alias-label-secondary); }

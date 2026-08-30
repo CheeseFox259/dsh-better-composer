@@ -5,22 +5,37 @@ describe('out-of-tree decoration adapter', () => {
   it('disposes every production registration through the fiber cleanup', () => {
     const decorationDispose = vi.fn()
     const actionDisposers = Array.from({ length: 11 }, () => vi.fn())
-    const slotDispose = vi.fn()
+    const editorSlotDispose = vi.fn()
+    const settingsSlotDispose = vi.fn()
     let actionIndex = 0
     const once = (dispose: () => void): (() => void) => {
       let done = false
       return () => { if (!done) { done = true; dispose() } }
     }
+    const settingsScope = {
+      getSnapshot: () => ({ value: { enabled: true, markdownVisual: true, diagnostics: true, toolbarMode: 'compact' } }),
+      subscribe: () => () => {},
+      set: vi.fn(async () => {}),
+      unset: vi.fn(async () => {}),
+    }
+    const cleanups: Array<() => void> = []
     const register = vi.fn(() => once(decorationDispose))
     const actionRegister = vi.fn((action: { id: string }) => {
       if (actionIndex >= actionDisposers.length) throw new Error(`unexpected action ${action.id}`)
       return once(actionDisposers[actionIndex++]!)
     })
-    const slotRegister = vi.fn(() => once(slotDispose))
-    const cleanups: Array<() => void> = []
+    let slotIndex = 0
+    const slotRegister = vi.fn(() => once(slotIndex++ === 0 ? editorSlotDispose : settingsSlotDispose))
     const ctx = {
       conversation: { decorations: { register }, actions: { register: actionRegister } },
-      slots: { register: slotRegister },
+      slots: {
+        register: slotRegister,
+        inject: vi.fn((_name: string, callback: () => (() => void)) => {
+          cleanups.push(callback())
+          return once(vi.fn())
+        }),
+      },
+      settingsScope: { bind: vi.fn(() => settingsScope) },
       effect: vi.fn((factory: () => (() => void)) => {
         const cleanup = factory()
         cleanups.push(cleanup)
@@ -37,10 +52,12 @@ describe('out-of-tree decoration adapter', () => {
     ])
     expect(actionRegister).toHaveBeenCalledTimes(11)
     expect(slotRegister).toHaveBeenCalledWith(expect.objectContaining({ name: 'conversation.input.editor' }), expect.any(Function))
+    expect(slotRegister).toHaveBeenCalledWith(expect.objectContaining({ name: 'settings.plugin.item', key: 'dsh-rich-editor' }), expect.any(Function))
     for (const cleanup of cleanups) cleanup()
     for (const cleanup of cleanups) cleanup()
     expect(decorationDispose).toHaveBeenCalledOnce()
     for (const dispose of actionDisposers) expect(dispose).toHaveBeenCalledOnce()
-    expect(slotDispose).toHaveBeenCalledOnce()
+    expect(editorSlotDispose).toHaveBeenCalledOnce()
+    expect(settingsSlotDispose).toHaveBeenCalledOnce()
   })
 })

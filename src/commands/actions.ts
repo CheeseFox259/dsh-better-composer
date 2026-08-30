@@ -15,3 +15,15 @@ export const composerActions: readonly ComposerAction[] = [
   { id: 'indent', order: 100, transform: prefixLines('    ') },
   { id: 'outdent', order: 110, transform: outdentAction },
 ]
+
+/**
+ * Bind the fixed action set to the live enabled preference.
+ * @param isEnabled - synchronous read of the current plugin setting.
+ * @returns action registrations that become inert while disabled.
+ */
+export function createEnabledActions(isEnabled: () => boolean): readonly ComposerAction[] {
+  return composerActions.map(action => ({
+    ...action,
+    transform: (context) => isEnabled() ? action.transform(context) : undefined,
+  }))
+}
