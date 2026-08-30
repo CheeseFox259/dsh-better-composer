@@ -6,6 +6,8 @@ Result: `ACCEPTANCE_PENDING`.
 
 M0 remains `GO`. M10 changes are plugin-only. The package now declares a portable `dsh.bundle` profile patch and was installed into an isolated temporary DSH profile. The profile composed `@deepseek-ai/dsh-rich-editor`, the Web server returned HTTP 200, and the package client resource was served. Real Composer interaction could not run because the required Chromium distribution is unavailable on this machine.
 
+Plugin implementation commit: `9bfe9ae` (`feat: integrate rich editor beta into DSH profiles`). No M10 DSH Core commit was created; the approved M1 Core baseline remains unchanged.
+
 ## Implementation
 
 The plugin implements four official Settings fields (`enabled`, `markdownVisual`, `diagnostics`, and `toolbarMode`), the keyed Settings card, Markdown projection from DSH `parseGfm()`, eleven pure actions, compact/hidden toolbar behavior, read-only Preview, same-textarea Expanded control, three diagnostics, Chinese-first copy, and independent effect-owned cleanup. No DSH Core source, shared profile, InputMachine, InputBar, local storage, second editor, production smoke hook, or DOM adapter was changed.
