@@ -1,5 +1,35 @@
 import type { ComposerAction } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { codeFenceAction, linkAction, outdentAction, prefixLines, wrapAction } from './action-transforms.ts'
+import { diagnosticsFor } from '../markdown/diagnostics.ts'
+import { maskNative } from '../markdown/native-mask.ts'
+
+const DIAGNOSTIC_CLASSES = [
+  'dsh-rich-editor-diagnostic-fence',
+  'dsh-rich-editor-diagnostic-inline-code',
+  'dsh-rich-editor-diagnostic-link',
+] as const
+
+/** Return the private action id that selects the first diagnostic of this class. */
+export function diagnosticActionId(className: string): string {
+  return `dsh-rich-editor:locate:${className}`
+}
+
+const diagnosticActions: readonly ComposerAction[] = DIAGNOSTIC_CLASSES.map((className, index) => ({
+  id: diagnosticActionId(className),
+  order: 1_000 + index,
+  transform: (context) => {
+    const diagnostic = diagnosticsFor(maskNative(context.draft, context.nativeRanges))
+      .find(candidate => candidate.className === className)
+    if (diagnostic === undefined) return undefined
+    return {
+      start: diagnostic.start,
+      end: diagnostic.end,
+      text: context.draft.slice(diagnostic.start, diagnostic.end),
+      selectionStart: diagnostic.start,
+      selectionEnd: diagnostic.end,
+    }
+  },
+}))
 
 /** Complete Beta action set, with generic ids and pure transforms. */
 export const composerActions: readonly ComposerAction[] = [
@@ -22,7 +52,7 @@ export const composerActions: readonly ComposerAction[] = [
  * @returns action registrations that become inert while disabled.
  */
 export function createEnabledActions(isEnabled: () => boolean): readonly ComposerAction[] {
-  return composerActions.map(action => ({
+  return [...composerActions, ...diagnosticActions].map(action => ({
     ...action,
     transform: (context) => isEnabled() ? action.transform(context) : undefined,
   }))

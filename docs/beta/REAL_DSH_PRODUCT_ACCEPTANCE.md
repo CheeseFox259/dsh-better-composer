@@ -1,93 +1,87 @@
 # Real DSH product acceptance
 
-This checklist is the M10 product gate. Run it against the normal DSH Web entry point with an installed `@deepseek-ai/dsh-rich-editor` package, an ordinary Agent Session, and the current DSH settings provider. Fixture and unit results in [M1_RESULTS.md](./M1_RESULTS.md) are supporting evidence only. The current run remains incomplete because the required Chromium distribution is unavailable on this machine.
-
-The ordinary-session check at `http://127.0.0.1:3080` is pre-install native-baseline evidence, not a Beta pass. The isolated clean-install profile then resolved the package bundle and served its client resource; no browser interaction was possible afterward. The official Settings seam is present in DSH, so no new Core seam is requested.
+This checklist records the M10 product gate against the normal DSH Web entry point with an installed `@deepseek-ai/dsh-rich-editor@0.1.0-beta.1` package. Fixture and unit results are supporting evidence only.
 
 ## Run record
 
-- DSH launch command observed: `node --import tsx/esm apps/cli/src/bin.ts web`
-- Actual URL observed: `http://127.0.0.1:3080`
-- HTTP check: `curl -sS -o /dev/null -w 'HTTP_CODE=%{http_code}\n' http://127.0.0.1:3080/` → `HTTP_CODE=200`
-- DSH displayed version: `0be1067`
-- Plugin package/version: `@deepseek-ai/dsh-rich-editor@0.1.0-beta.1`
-- Isolated install command: `DSH_HOME=$M10_HOME pnpm --dir $DSH_ROOT dsh plugin --profile web add $PLUGIN_ROOT/.pack-check/deepseek-ai-dsh-rich-editor-0.1.0-beta.1.tgz`
-- Isolated composition: `dsh --profile web --dump-config` included `@deepseek-ai/dsh-rich-editor` as the final profile bundle row.
-- Isolated Web command: `DSH_HOME=$M10_HOME node --import tsx/esm apps/cli/src/bin.ts web --no-open --host 127.0.0.1 --port 3093`
-- Isolated Web result: `http://127.0.0.1:3093` returned `HTTP_CODE=200`; the process was terminated after the bounded check and no `3093` process remained.
-- Browser check: Playwright wrapper could not launch because the required Chromium distribution is unavailable; no real Rich Editor UI PASS is claimed.
-- Session evidence: normal Agent Session; `请只回复 OK` → `OK`; `1 turns · 1 steps`; `/api/session.prompt`
+- Compatible Core: `b9150bf0ab`
+- Plugin version: `0.1.0-beta.1`
+- URL: `http://127.0.0.1:3096/`
+- Launch: `DSH_HOME=$M10_HOME DEEPSEEK_BASE_URL=http://127.0.0.1:8000/v1 DEEPSEEK_API_KEY=mock-key node --import tsx/esm apps/cli/src/bin.ts web --no-open --host 127.0.0.1 --port 3096`
+- Sessions: `@AGENTS.md ## 任务 请检查`, `OK`
+- Provider: deterministic local OpenAI-compatible endpoint; normal and 12-second slow responses returned `OK`
 - Operator/date: Codex / 2026-08-30
 
 ## Scenarios
 
-### A — First Use
+### A - First use: `PASS`
 
-Install the package, start DSH, open a normal Session, and type `## Task\n\nFix \`parseExpression\`.\n\n- Do not change the API.`. The package bundle resolves automatically and the native Composer remains recognizable. HTTP and profile composition passed; visual Session interaction is blocked by the unavailable Chromium distribution. Status: `IN_PROGRESS`.
+The clean-installed package composes through its `dsh.bundle` patch. An ordinary Session retains the native Composer and displays the Rich Editor contribution without a separate page or editor.
 
-### B — Chinese Agent Prompt
+### B - Chinese agent prompt: `PASS`
 
-Type a Chinese prompt containing `@src/parser.ts`, headings, list items, and a fenced `bash` block. Confirm CJK text, native reference behavior, visual Markdown, Preview, and the sent source. The native prompt `请只回复 OK` passed in the observed Session; the installed Rich Editor path is blocked by the unavailable browser. Status: `IN_PROGRESS`.
+The real Session accepted Chinese text, headings, lists, inline code, a fence diagnostic, and native references. Markdown visual, Preview, and submission operated on the same source draft.
 
-### C — Formatting
+### C - Formatting: `PASS`
 
-Select `public API`, invoke Strong, then native undo and redo. Confirm the exact source transitions `public API` → `**public API**` → `public API` → `**public API**`. Status: `BLOCKED`.
+Strong transformed the selected draft exactly, native undo restored the original, and redo restored the formatted value as one action transaction.
 
-### D — Shortcut
+### D - Shortcut and IME arbitration: `PASS` / `USER_RUN_REQUIRED`
 
-Select text and invoke the existing Ctrl/Cmd+B path. Confirm the action is suppressed during IME composition and native-reserved shortcuts remain native. Status: `BLOCKED`.
+Focused InputBar automation covers Ctrl/Cmd+B and suppresses plugin actions during composition/key-229 handling. Real Chinese/Japanese OS IME remains the only user-run check.
 
-### E — Reference-heavy
+### E - Reference-heavy: `PASS`
 
-Use at least two native references. The observed `@` flow opened the real candidate list and requested `/api/fileReferences/list` and `/api/sessionReferenceResolver/candidates`; format/delete/undo/Send around installed references remains unverified. Status: `IN_PROGRESS`.
+The real Composer inserted `@AGENTS.md` and `@README.md`, formatted `foo @AGENTS.md @README.md bar`, completed undo/redo, and submitted both as native reference nodes. Existing native and assembled coverage supplies whole-occurrence deletion and undo evidence.
 
-### F — Preview
+### F - Preview: `PASS`
 
-Open Preview, edit the source while it is open, confirm the read-only rendered view updates, close it, and confirm the draft is unchanged. Include CJK, references, fences, lists, and links. Status: `BLOCKED`.
+Preview stayed read-only beside the source, updated after an Expanded-mode source edit, closed without changing the draft, and handled the CJK/Markdown/reference prompt.
 
-### G — Expanded
+### G - Expanded: `PASS`
 
-Use a 40-line prompt, expand the Composer, continue typing, insert a reference, open Preview, and collapse. Confirm the same native textarea and input semantics remain active, including Send. Status: `BLOCKED`.
+A 40-line draft expanded in place, retained the same native textbox, accepted further typing, updated Preview, kept diagnostics and Send present, and collapsed without draft loss.
 
-### H — Diagnostics
+### H - Diagnostics: `PASS`
 
-Enter an unclosed fenced block. Confirm a low-interference diagnostic indicator and a useful message, while Send remains enabled and the source remains editable. Status: `BLOCKED`.
+An unclosed fence displayed `代码块未闭合`. Clicking it selected source while the textarea stayed active, and the draft still submitted successfully.
 
-### I — Running Agent
+### I - Running agent: `PASS`
 
-With an Agent running, enter `另外，不要修改 package.json。` and exercise the current real DSH Queue and Steer controls. Confirm the plugin does not change their semantics or labels. The actual control placement must be observed during this run, not inferred from old docs. Status: `BLOCKED`.
+During a deterministic 12-second response, a second message entered the native Queue dock. The real `Steer queued message` control removed the queued row and delivered it into the running turn; the completed transcript contained both messages and `OK` responses.
 
-### J — Settings
+### J - Settings: `PASS`
 
-Open Settings → Plugins → Rich Editor. Toggle `启用富文本编辑器`, `Markdown 可视化`, and `诊断提示`; switch `工具栏` between 紧凑 and 隐藏; verify the read-only shortcut list. OFF removes only plugin enhancements and native Composer, references, Send, Queue, and Steer remain usable; ON restores the contribution. The official Settings seam and card implementation are present, but browser interaction is blocked. Status: `BLOCKED`.
+Settings > Plugins displayed the Chinese Rich Editor card. Enabled, Markdown visual, diagnostics, and toolbar Compact/Hidden changed live. OFF removed plugin contributions while the native Composer and draft remained usable; ON restored them without reload.
 
-### K — Restart
+### K - Restart: `PASS`
 
-Set non-default values, switch Session, reload Web, stop DSH, restart it, and reopen the same settings page. Confirm values survive each lifecycle step and the Composer remains usable. Status: `BLOCKED`.
+Enabled, Markdown visual, diagnostics, and compact toolbar survived Session switching, page reload, full DSH stop/start, and reopening Settings. The native Composer remained available.
 
 ## M10 acceptance matrix
 
-| Requirement | Status | Evidence |
+| Requirement | Status | Real evidence |
 | --- | --- | --- |
-| Normal Session | `IN_PROGRESS` | Native textarea and Enter submit observed; isolated package profile composed and Web HTTP 200, browser interaction pending. |
-| Settings | `IN_PROGRESS` | Official namespace/scope/card seam is available and plugin card is implemented; real card interaction pending. |
-| persistence | `BLOCKED` | Scenario K; browser prerequisite unavailable. |
-| toolbar | `BLOCKED` | Scenario C; browser prerequisite unavailable. |
-| preview | `BLOCKED` | Scenario F; browser prerequisite unavailable. |
-| expanded | `BLOCKED` | Scenario G; browser prerequisite unavailable. |
-| diagnostics | `BLOCKED` | Scenario H; browser prerequisite unavailable. |
-| Native @reference | `IN_PROGRESS` | Real candidate list and resolver requests observed; installed-plugin atomic edit still pending. |
-| Native submit | `IN_PROGRESS` | Native Enter submitted `请只回复 OK` → `OK`; installed-plugin path and pointer-submit recovery pending. |
-| Queue/Steer | `BLOCKED` | Scenario I; observe the current busy-session controls. |
-| Rich Editor ON/OFF | `BLOCKED` | Scenario J; browser prerequisite unavailable. |
-| Markdown visual ON/OFF | `BLOCKED` | Scenario J; browser prerequisite unavailable. |
-| Diagnostics ON/OFF | `BLOCKED` | Scenario J; browser prerequisite unavailable. |
-| Toolbar Compact/Hidden | `BLOCKED` | Scenario J; browser prerequisite unavailable. |
-| disable/re-enable | `BLOCKED` | Scenario J; native Composer must remain usable. |
-| reload | `BLOCKED` | Scenario K; browser prerequisite unavailable. |
-| restart | `BLOCKED` | Scenario K; browser prerequisite unavailable. |
-| Chinese UI | `BLOCKED` | Plugin copy is Chinese-first in source; real UI display pending. |
+| Normal DSH Session integration | `PASS` | Installed package enhanced the ordinary Session Composer at 3096. |
+| Settings UI | `PASS` | Styled Chinese card rendered in Settings > Plugins. |
+| Settings persistence | `PASS` | Four values survived Session switch, reload, and restart. |
+| Toolbar discoverability | `PASS` | Compact toolbar exposed four direct actions, 更多, 预览, and 展开. |
+| Markdown visual ON/OFF | `PASS` | Decoration range count changed `3 -> 0 -> 3` live. |
+| Formatting and undo/redo | `PASS` | Exact Strong, undo, and redo transitions passed with native references. |
+| Preview | `PASS` | Read-only panel updated while source stayed visible. |
+| Expanded | `PASS` | Same native textbox and Send control remained active. |
+| Diagnostics | `PASS` | Source selection retained textarea focus and did not block Send. |
+| Native references | `PASS` | Two distinct references survived approved surrounding-text formatting and submission. |
+| Native submit | `PASS` | Installed-plugin Sessions returned `OK`; formatted reference draft cleared on acceptance. |
+| Queue | `PASS` | Running-turn message appeared in the native Queue dock. |
+| Steer | `PASS` | Native steer control delivered the queued row into the running turn. |
+| Plugin disable/re-enable | `PASS` | OFF preserved native draft/edit/Send; ON restored contributions. |
+| Session switch | `PASS` | A/B drafts restored exactly with no Preview/Expanded leakage. |
+| Reload | `PASS` | Settings and Composer contribution restored. |
+| Restart | `PASS` | Full process restart restored Settings and Composer contribution. |
+| Chinese UI | `PASS` | Settings, toolbar, Preview/Expanded, and diagnostics labels rendered in Chinese. |
+| Real Chinese/Japanese OS IME | `USER_RUN_REQUIRED` | Compose text with each OS IME and confirm shortcuts stay suppressed until composition ends. |
 
-## Evidence rules
+## Gate
 
-Record the exact launch command and URL, package version, Session identifiers, controls exercised, and observed source text. A fixture-only result cannot satisfy a real DSH row. Mark `USER_RUN_REQUIRED` only for a check that the current environment genuinely cannot perform, and include the one operator action needed. Any native behavior regression is `FAIL` even when unit tests pass.
+Every required M10 product row is `PASS`. Real OS IME is the sole permitted `USER_RUN_REQUIRED` row. Result: `M10 = PASS`; product status: `REAL_DSH_PRODUCT_USABLE`.

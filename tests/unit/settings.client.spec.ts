@@ -3,11 +3,17 @@ import {
   DEFAULT_SETTINGS, normalizeSettings, toolbarActions,
   type RichEditorSettings,
 } from '../../src/settings.ts'
+import { Config } from '../../src/index.ts'
 import { RichEditorSettingsStore } from '../../src/client/settings-store.ts'
-import { createEnabledActions } from '../../src/commands/actions.ts'
+import { createEnabledActions, diagnosticActionId } from '../../src/commands/actions.ts'
 import { createMarkdownProvider } from '../../src/markdown/provider.ts'
 
 describe('Rich Editor settings', () => {
+  it('exports the canonical plugin schema with four defaults and strict values', () => {
+    expect(Config({} as never)).toEqual(DEFAULT_SETTINGS)
+    expect(() => Config({ toolbarMode: 'wide' } as never)).toThrow()
+  })
+
   it('fills all four settings from the product defaults', () => {
     expect(normalizeSettings({})).toEqual(DEFAULT_SETTINGS)
     expect(normalizeSettings({ enabled: false, toolbarMode: 'hidden' })).toEqual({
@@ -57,6 +63,22 @@ describe('Rich Editor settings', () => {
     const actions = createEnabledActions(() => false)
     const action = actions.find(candidate => candidate.id === 'strong')!
     expect(action.transform({ draft: 'x', draftRev: 1, selection: { start: 0, end: 1 }, nativeRanges: [] })).toBeUndefined()
+  })
+
+  it('locates a diagnostic through a text-preserving native action result', () => {
+    const draft = '```ts\nfoo()'
+    const action = createEnabledActions(() => true)
+      .find(candidate => candidate.id === diagnosticActionId('dsh-rich-editor-diagnostic-fence'))!
+    const result = action.transform({
+      draft, draftRev: 1, selection: { start: draft.length, end: draft.length }, nativeRanges: [],
+    })
+    expect(result).toEqual({
+      start: 0,
+      end: draft.length,
+      text: draft,
+      selectionStart: 0,
+      selectionEnd: draft.length,
+    })
   })
 
   it('separates enabled, visual, and diagnostic settings in the provider', () => {

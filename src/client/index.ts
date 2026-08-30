@@ -19,7 +19,24 @@ export function apply(ctx: ClientContext): void {
   const settings = new RichEditorSettingsStore(ctx.settingsScope.bind({ namespace: SETTINGS_NAMESPACE }))
   ctx.effect(() => () => { settings.dispose() }, 'dsh-rich-editor: settings store')
   const provider = createDecorationProvider(() => settings.get())
-  ctx.effect(() => ctx.conversation.decorations.register(provider), 'dsh-rich-editor: markdown decorations')
+  ctx.effect(() => {
+    let current = settings.get()
+    let dispose = ctx.conversation.decorations.register(provider)
+    const unsubscribe = settings.subscribe(() => {
+      const next = settings.get()
+      const changed = next.enabled !== current.enabled
+        || next.markdownVisual !== current.markdownVisual
+        || next.diagnostics !== current.diagnostics
+      current = next
+      if (!changed) return
+      dispose()
+      dispose = ctx.conversation.decorations.register(provider)
+    })
+    return () => {
+      unsubscribe()
+      dispose()
+    }
+  }, 'dsh-rich-editor: markdown decorations')
   for (const action of createEnabledActions(() => settings.get().enabled)) {
     ctx.effect(() => ctx.conversation.actions.register(action), `dsh-rich-editor: action ${action.id}`)
   }

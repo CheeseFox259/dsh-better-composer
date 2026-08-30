@@ -2,7 +2,7 @@ import { useState, useSyncExternalStore } from 'react'
 import type { ComposerEditorProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SlotComponent } from '@deepseek-ai/dsh-client-ui-slots'
 import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
-import { composerActions } from '../commands/actions.ts'
+import { composerActions, diagnosticActionId } from '../commands/actions.ts'
 import { diagnosticsFor } from '../markdown/diagnostics.ts'
 import { toolbarActions, type RichEditorSettings } from '../settings.ts'
 import type { RichEditorSettingsStore } from './settings-store.ts'
@@ -46,7 +46,7 @@ function EditorView({ useInput, runAction, expanded, setExpanded, settings }: Co
   const diagnostics = current.diagnostics ? diagnosticsFor(draft) : []
   return (
     <div className="dsh-rich-editor-editor" data-rich-editor>
-      <div className="dsh-rich-editor-toolbar" role="toolbar" aria-label="Markdown 工具栏">
+      {current.toolbarMode === 'compact' ? <div className="dsh-rich-editor-toolbar" role="toolbar" aria-label="编辑工具栏">
         {directActions.map(action => (
           <button key={action.id} type="button" className="dsh-rich-editor-button" title={labels[action.id]?.title}
             onMouseDown={event => { event.preventDefault() }}
@@ -76,15 +76,19 @@ function EditorView({ useInput, runAction, expanded, setExpanded, settings }: Co
         <button type="button" className="dsh-rich-editor-button" onClick={() => { setExpanded(!expanded) }}>
           {expanded ? '收起' : '展开'}
         </button>
-      </div>
-      {preview && <div className="dsh-rich-editor-preview" data-rich-editor-preview><MarkdownText text={draft} /></div>}
+      </div> : null}
+      {current.toolbarMode === 'compact' && preview && <div className="dsh-rich-editor-preview" data-rich-editor-preview><MarkdownText text={draft} /></div>}
       {diagnostics.length > 0 ? <ul className="dsh-rich-editor-diagnostics" aria-label="Markdown 诊断">
         {diagnostics.map((diagnostic, index) => <li key={`${diagnostic.className}-${diagnostic.start}-${index}`}>
-          {diagnostic.className === 'dsh-rich-editor-diagnostic-fence'
-            ? '代码块未闭合'
-            : diagnostic.className === 'dsh-rich-editor-diagnostic-inline-code'
-              ? '行内代码定界符未闭合'
-              : '显式链接格式不完整'}
+          <button type="button" className="dsh-rich-editor-diagnostic" title="定位到源码"
+            onMouseDown={event => { event.preventDefault() }}
+            onClick={() => { runAction(diagnosticActionId(diagnostic.className)) }}>
+            {diagnostic.className === 'dsh-rich-editor-diagnostic-fence'
+              ? '代码块未闭合'
+              : diagnostic.className === 'dsh-rich-editor-diagnostic-inline-code'
+                ? '行内代码定界符未闭合'
+                : '显式链接格式不完整'}
+          </button>
         </li>)}
       </ul> : null}
     </div>

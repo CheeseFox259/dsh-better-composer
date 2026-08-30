@@ -4,7 +4,7 @@ import { apply } from '../../src/client/index.ts'
 describe('out-of-tree decoration adapter', () => {
   it('disposes every production registration through the fiber cleanup', () => {
     const decorationDispose = vi.fn()
-    const actionDisposers = Array.from({ length: 11 }, () => vi.fn())
+    const actionDisposers = Array.from({ length: 14 }, () => vi.fn())
     const editorSlotDispose = vi.fn()
     const settingsSlotDispose = vi.fn()
     let actionIndex = 0
@@ -50,7 +50,7 @@ describe('out-of-tree decoration adapter', () => {
     expect(provider?.decorate({ sessionId: 's1' as never, draft: '# x', draftRev: 1, nativeRanges: [] })).toEqual([
       expect.objectContaining({ className: 'dsh-rich-editor-heading' }),
     ])
-    expect(actionRegister).toHaveBeenCalledTimes(11)
+    expect(actionRegister).toHaveBeenCalledTimes(14)
     expect(slotRegister).toHaveBeenCalledWith(expect.objectContaining({ name: 'conversation.input.editor' }), expect.any(Function))
     expect(slotRegister).toHaveBeenCalledWith(expect.objectContaining({ name: 'settings.plugin.item', key: 'dsh-rich-editor' }), expect.any(Function))
     for (const cleanup of cleanups) cleanup()
