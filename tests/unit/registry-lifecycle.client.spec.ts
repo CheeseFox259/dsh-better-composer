@@ -4,7 +4,7 @@ import { apply } from '../../src/client/index.ts'
 describe('plugin registration lifecycle', () => {
   it('keeps every production registration disposer independently reachable', () => {
     const decorationDispose = vi.fn()
-    const actionDisposers = Array.from({ length: 14 }, () => vi.fn())
+    const actionDisposers = Array.from({ length: 11 }, () => vi.fn())
     let actionIndex = 0
     const cleanups: Array<() => void> = []
     const listeners = new Set<() => void>()
@@ -46,7 +46,7 @@ describe('plugin registration lifecycle', () => {
   })
 
   it('refreshes the decoration registration when live settings change', () => {
-    let value = { enabled: true, markdownVisual: true, diagnostics: true, toolbarMode: 'compact' }
+    let value = { enabled: true, markdownVisual: true, diagnostics: true, toolbarMode: 'compact' as const }
     const scopeListeners = new Set<() => void>()
     const decorationDisposers = [vi.fn(), vi.fn()]
     let decorationIndex = 0

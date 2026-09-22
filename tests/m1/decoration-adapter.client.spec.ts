@@ -4,7 +4,7 @@ import { apply } from '../../src/client/index.ts'
 describe('out-of-tree decoration adapter', () => {
   it('disposes every production registration through the fiber cleanup', () => {
     const decorationDispose = vi.fn()
-    const actionDisposers = Array.from({ length: 14 }, () => vi.fn())
+    const actionDisposers = Array.from({ length: 11 }, () => vi.fn())
     const editorSlotDispose = vi.fn()
     const settingsSlotDispose = vi.fn()
     let actionIndex = 0
@@ -45,14 +45,15 @@ describe('out-of-tree decoration adapter', () => {
 
     apply(ctx as never)
 
-    expect(register).toHaveBeenCalledWith(expect.objectContaining({ id: 'dsh-rich-editor-markdown' }))
+    expect(register).toHaveBeenCalledWith(expect.objectContaining({ id: 'dsh-better-composer-markdown' }))
     const provider = register.mock.calls[0]?.[0]
-    expect(provider?.decorate({ sessionId: 's1' as never, draft: '# x', draftRev: 1, nativeRanges: [] })).toEqual([
-      expect.objectContaining({ className: 'dsh-rich-editor-heading' }),
-    ])
-    expect(actionRegister).toHaveBeenCalledTimes(14)
+    expect(provider?.decorate({ sessionId: 's1' as never, draft: '# x', draftRev: 1, nativeRanges: [] })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ className: 'dsh-better-composer-heading' }),
+      expect.objectContaining({ className: 'dsh-better-composer-marker', start: 0, end: 2 }),
+    ]))
+    expect(actionRegister).toHaveBeenCalledTimes(11)
     expect(slotRegister).toHaveBeenCalledWith(expect.objectContaining({ name: 'conversation.input.editor' }), expect.any(Function))
-    expect(slotRegister).toHaveBeenCalledWith(expect.objectContaining({ name: 'settings.plugin.item', key: 'dsh-rich-editor' }), expect.any(Function))
+    expect(slotRegister).toHaveBeenCalledWith(expect.objectContaining({ name: 'settings.plugin.item', key: 'dsh-better-composer' }), expect.any(Function))
     for (const cleanup of cleanups) cleanup()
     for (const cleanup of cleanups) cleanup()
     expect(decorationDispose).toHaveBeenCalledOnce()

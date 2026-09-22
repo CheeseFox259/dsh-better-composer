@@ -1,7 +1,7 @@
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import css from './styles.css?inline'
 
-const PLUGIN_ID = '@deepseek-ai/dsh-rich-editor'
+const PLUGIN_ID = '@noleftbutright/dsh-better-composer'
 
 /** Mount the plugin stylesheet for exactly the client contribution lifetime. */
 export function installStyles(ctx: ClientContext): void {
@@ -13,5 +13,5 @@ export function installStyles(ctx: ClientContext): void {
     tag.textContent = css
     document.head.appendChild(tag)
     return () => { tag.remove() }
-  }, 'dsh-rich-editor: stylesheet')
+  }, 'dsh-better-composer: stylesheet')
 }

@@ -13,6 +13,7 @@
     "rewriteRelativeImportExtensions": true,
     "rootDir": "src",
     "outDir": "lib/types",
+    "declaration": true,
     "noEmit": false
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts"]
