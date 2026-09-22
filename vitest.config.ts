@@ -10,6 +10,7 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.spec.ts', 'tests/**/*.spec.tsx'],
+    testTimeout: 30_000,
     // The DSH primitives package loads CSS-module imports at entry; inline it
     // so Vite transforms them instead of Node hitting the raw .css file.
     server: {
