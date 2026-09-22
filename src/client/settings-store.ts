@@ -1,21 +1,21 @@
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
-import { DEFAULT_SETTINGS, normalizeSettings, type RichEditorSettings } from '../settings.ts'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { DEFAULT_SETTINGS, normalizeSettings, type BetterComposerSettings } from '../settings.ts'
 
 /** Reactive browser view over the plugin's official Settings scope. */
-export class RichEditorSettingsStore {
-  private current: RichEditorSettings = { ...DEFAULT_SETTINGS }
+export class BetterComposerSettingsStore {
+  private current: BetterComposerSettings = { ...DEFAULT_SETTINGS }
   private readonly listeners = new Set<() => void>()
   private readonly unsubscribe: () => void
   private disposed = false
 
   /** @param scope - caller-owned Settings scope for the plugin namespace. */
-  constructor(private readonly scope: SettingsScope<RichEditorSettings>) {
+  constructor(private readonly scope: SettingsScope<BetterComposerSettings>) {
     this.sync()
     this.unsubscribe = scope.subscribe(() => { this.sync() })
   }
 
   /** @returns the latest complete settings value. */
-  get(): RichEditorSettings {
+  get(): BetterComposerSettings {
     return this.current
   }
 
@@ -36,7 +36,7 @@ export class RichEditorSettingsStore {
    * @param value - field value accepted by the local schema.
    * @returns settlement after the scope write and recovery handling.
    */
-  set<K extends keyof RichEditorSettings>(field: K, value: RichEditorSettings[K]): Promise<void> {
+  set<K extends keyof BetterComposerSettings>(field: K, value: BetterComposerSettings[K]): Promise<void> {
     return this.scope.set(field, value)
   }
 
@@ -57,9 +57,10 @@ export class RichEditorSettingsStore {
   }
 }
 
-function sameSettings(left: RichEditorSettings, right: RichEditorSettings): boolean {
+function sameSettings(left: BetterComposerSettings, right: BetterComposerSettings): boolean {
   return left.enabled === right.enabled
     && left.markdownVisual === right.markdownVisual
     && left.diagnostics === right.diagnostics
     && left.toolbarMode === right.toolbarMode
+    && left.deterministicAssistance === right.deterministicAssistance
 }

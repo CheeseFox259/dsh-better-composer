@@ -1,6 +1,7 @@
 import type { UserConfig } from 'tsdown'
+import { typertPlugin } from '@deepseek-ai/dsh-typert-generator/tsdown'
 
-const PACKAGE_ID = '@deepseek-ai/dsh-rich-editor'
+const PACKAGE_ID = '@noleftbutright/dsh-better-composer'
 const nodeConfig: UserConfig = {
   name: PACKAGE_ID,
   entry: ['src/index.ts'],
@@ -11,6 +12,10 @@ const nodeConfig: UserConfig = {
   fixedExtension: false,
   dts: false,
   clean: false,
+  // Lowers TC39 decorators (@Remote) in TypeScript sources. The package-mode
+  // generation pass skips us: no ./typert or ./remote export is declared, and
+  // the repo-root tsconfig.host.json only exists to satisfy its root probe.
+  plugins: [typertPlugin({ mode: 'package' })],
 }
 
 const clientConfig: UserConfig = {

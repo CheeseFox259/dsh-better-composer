@@ -1,20 +1,25 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
-import { DEFAULT_SETTINGS, SETTINGS_NAMESPACE, type RichEditorSettings } from './settings.ts'
+import { DEFAULT_SETTINGS, SETTINGS_NAMESPACE, type BetterComposerSettings } from './settings.ts'
+import { BetterComposerRemoteService } from './remote.ts'
 
 /** Stable Settings namespace shared by the Host and browser halves. */
 export { SETTINGS_NAMESPACE }
 
-const SETTINGS_NS = settingsNamespace(SETTINGS_NAMESPACE)
+const SETTINGS_NS = SETTINGS_NAMESPACE
 
-/** Schema for the four live Rich Editor preferences. */
-export const Config: z<RichEditorSettings> = z.object({
+/** Schema for the four exposed Better Composer preferences and the legacy toolbar field. */
+export const Config: z<BetterComposerSettings> = z.object({
   enabled: z.boolean().default(DEFAULT_SETTINGS.enabled),
   markdownVisual: z.boolean().default(DEFAULT_SETTINGS.markdownVisual),
   diagnostics: z.boolean().default(DEFAULT_SETTINGS.diagnostics),
   toolbarMode: z.union(['compact', 'hidden'] as const).default(DEFAULT_SETTINGS.toolbarMode),
-})
+  deterministicAssistance: z.boolean().default(DEFAULT_SETTINGS.deterministicAssistance),
+  pasteClipThreshold: z.number().default(DEFAULT_SETTINGS.pasteClipThreshold),
+  // Published schemastery lines infer slightly different schema generics;
+  // the runtime host validates against this exact schema object.
+}) as z<BetterComposerSettings>
 
 /** Descriptive alias for consumers that identify the Settings schema by role. */
 export const SettingsSchema = Config
@@ -24,9 +29,12 @@ export const SettingsSchema = Config
  * @param ctx - plugin context owning the optional Settings provider.
  * @param config - composition defaults for this plugin entry.
  */
-export function apply(ctx: Context, config: RichEditorSettings = { ...DEFAULT_SETTINGS }): void {
-  installSettingsSection(ctx, SETTINGS_NS, Config, config, {
-    setSource: () => {},
-    onChange: () => {},
+export function apply(ctx: Context, config: BetterComposerSettings = { ...DEFAULT_SETTINGS }): void {
+  new BetterComposerRemoteService(ctx)
+  ctx.inject(['settings'], (settingsCtx) => {
+    ;(settingsCtx.settings as unknown as { installSection(owner: unknown, ns: string, schema: unknown, entry: unknown, hooks: unknown): void }).installSection(ctx, SETTINGS_NS, Config, config, {
+      setSource: () => {},
+      onChange: () => {},
+    })
   })
 }

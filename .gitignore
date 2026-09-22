@@ -2,3 +2,7 @@
 /node_modules/
 .vitest/
 /.pack-check/
+.DS_Store
+*.log
+.env*
+coverage/
