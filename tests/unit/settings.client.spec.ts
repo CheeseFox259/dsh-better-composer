@@ -20,7 +20,6 @@ describe('Better Composer settings', () => {
       markdownVisual: true,
       diagnostics: true,
       toolbarMode: 'hidden',
-      deterministicAssistance: false,
       pasteClipThreshold: 4000,
     })
   })
@@ -48,8 +47,8 @@ describe('Better Composer settings', () => {
     await store.set('diagnostics', false)
     expect(store.get()).toMatchObject({ diagnostics: false })
     expect(updates).toBe(1)
-    await store.set('deterministicAssistance', true)
-    expect(store.get()).toMatchObject({ deterministicAssistance: true })
+    await store.set('markdownVisual', false)
+    expect(store.get()).toMatchObject({ markdownVisual: false })
     expect(updates).toBe(2)
     off()
     store.dispose()
@@ -66,7 +65,7 @@ describe('Better Composer settings', () => {
     } as never
     const store = new BetterComposerSettingsStore(scope)
 
-    await expect(store.set('deterministicAssistance', true)).rejects.toThrow('settings unavailable')
+    await expect(store.set('markdownVisual', false)).rejects.toThrow('settings unavailable')
     expect(store.get()).toEqual(DEFAULT_SETTINGS)
     store.dispose()
   })
@@ -86,15 +85,6 @@ describe('Better Composer settings', () => {
 
   it('keeps the legacy toolbarMode field schema-compatible without a toolbar consumer', () => {
     expect(normalizeSettings({ toolbarMode: 'hidden' })).toEqual({ ...DEFAULT_SETTINGS, toolbarMode: 'hidden' })
-  })
-
-  it('keeps deterministic assistance opt-in and independent from Markdown diagnostics', () => {
-    expect(DEFAULT_SETTINGS.deterministicAssistance).toBe(false)
-    expect(normalizeSettings({ deterministicAssistance: true })).toEqual({
-      ...DEFAULT_SETTINGS,
-      deterministicAssistance: true,
-    })
-    expect(normalizeSettings({ deterministicAssistance: 'yes' })).toEqual(DEFAULT_SETTINGS)
   })
 
   it('separates display and diagnostic settings in the provider', () => {

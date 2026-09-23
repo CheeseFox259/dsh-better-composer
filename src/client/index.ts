@@ -147,6 +147,26 @@ function createContextMapProbe(ctx: ClientContext, sessionId: string): ContextMa
     sourceUnsubs = undefined
   }
 
+  // Full-history pull: the event window opens on the session tail. Paging back
+  // to seq 1 prepends every earlier page; each prepend notifies subscribers,
+  // so the map repaints as history arrives. Older hosts without loadThrough
+  // report a settled (empty) load.
+  let historyStarted = false
+  let historyDone = false
+  const loadAllHistory = (): void => {
+    if (historyStarted) return
+    historyStarted = true
+    const loader = (binding?.session as { readonly loadThrough?: (seq: never) => Promise<void> } | undefined)?.loadThrough
+    if (typeof loader !== 'function') {
+      historyDone = true
+      return
+    }
+    void loader.call(binding?.session, 1 as never).catch(() => {}).finally(() => {
+      historyDone = true
+      notify()
+    })
+  }
+
   return {
     version: () => version,
     subscribe: (listener) => {
@@ -157,6 +177,8 @@ function createContextMapProbe(ctx: ClientContext, sessionId: string): ContextMa
         if (listeners.size === 0) dropSources()
       }
     },
+    historyLoading: () => historyStarted && !historyDone,
+    loadAllHistory,
     projection: (key) => {
       try {
         return projections?.faceOf?.(key)?.getSnapshot?.()

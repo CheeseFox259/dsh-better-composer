@@ -4,7 +4,7 @@ export const MAX_SYNC_PROJECTION_LENGTH = 50_000
 /** Maximum draft length for synchronous live code-token presentation. */
 export const MAX_LIVE_CODE_TOKEN_LENGTH = 4_096
 
-/** Maximum ordinary text scanned by one optional diagnostics or assistance pass. */
+/** Maximum ordinary text scanned by one optional diagnostics pass. */
 export const MAX_OPTIONAL_SCAN_LENGTH = 50_000
 
 /** Maximum prefix inspected when proving Markdown completion ownership. */

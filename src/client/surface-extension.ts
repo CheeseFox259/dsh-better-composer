@@ -1,7 +1,6 @@
 import type {
   ComposerSurfaceExtension, ComposerSurfaceExtensionPresentation,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { deterministicAssistanceForSegments } from '../markdown/assistance.ts'
 import { acceptMarkdownCompletion, markdownCompletion } from '../markdown/completion.ts'
 import { diagnosticsForSegments } from '../markdown/diagnostics.ts'
 import { MAX_SYNC_PROJECTION_LENGTH } from '../markdown/limits.ts'
@@ -69,12 +68,6 @@ export function createMarkdownSurfaceExtension(settings: BetterComposerSettingsS
         }))
         : []
       const hints = [
-        ...(current.deterministicAssistance
-          ? deterministicAssistanceForSegments({
-            draftRev: context.draftRev,
-            segments: context.textSegments.map(segment => ({ sourceStart: segment.start, text: segment.text })),
-          })
-          : []),
         // The decoration provider fails open past the sync-projection bound;
         // say so instead of letting Markdown paint silently vanish.
         ...(context.draft.length > MAX_SYNC_PROJECTION_LENGTH
@@ -98,7 +91,6 @@ export function createMarkdownSurfaceExtension(settings: BetterComposerSettingsS
     },
 
     handleKey(request): 'consumed' | 'pass' {
-      if (request.context.composing || request.context.triggerOwner !== 'none') return 'pass'
       const completion = request.presentation.popup ?? request.presentation.ghost
       if (completion === undefined) return 'pass'
       const id = completionKey({

@@ -78,7 +78,7 @@ function EditorView({ registerSurfaceExtension, surfacePresentation, surfaceKey,
     () => settings.get(),
   )
   const extension = useMemo(() => createMarkdownSurfaceExtension(settings), [
-    settings, surfaceKey, current.enabled, current.diagnostics, current.deterministicAssistance,
+    settings, surfaceKey, current.enabled, current.diagnostics,
   ])
   useEffect(() => registerSurfaceExtension?.(extension), [extension, registerSurfaceExtension])
 
@@ -152,8 +152,8 @@ function EditorSurface({
           {diagnostic.message}
         </li>)}
       </ul> : null}
-      {hints.length > 0 ? <ul className="dsh-better-composer-assistance" aria-label="确定性写作辅助" data-better-composer-assistance>
-        {hints.map((hint, index) => <li key={`${hint.kind}-${hint.start}-${index}`} data-assistance-kind={hint.kind} data-revision={hint.revision} data-assistance-start={hint.start} data-assistance-end={hint.end}>
+      {hints.length > 0 ? <ul className="dsh-better-composer-hints" aria-label="编辑器提示" data-better-composer-hints>
+        {hints.map((hint, index) => <li key={`${hint.kind}-${hint.start}-${index}`} data-hint-kind={hint.kind} data-revision={hint.revision} data-hint-start={hint.start} data-hint-end={hint.end}>
           {hint.message}
         </li>)}
         </ul> : null}

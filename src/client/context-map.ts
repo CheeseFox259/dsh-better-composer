@@ -6,6 +6,12 @@ export interface ContextTurnStat {
   readonly userTokens: number
   /** Provider-reported assistant output tokens when present, else estimated. */
   readonly assistantTokens: number
+  /** Tool calls executed inside this turn. */
+  readonly toolCalls: number
+  /** File blocks carried by this turn's messages. */
+  readonly fileRefs: number
+  /** Image blocks carried by this turn's messages. */
+  readonly imageCount: number
 }
 
 /** Defensive digest of one session event window for the context map. */
@@ -85,15 +91,17 @@ export function summarizeContextWindow(
   let estimatedChars = 0
   let assistantOutputTokens = 0
   let turnIndex = 0
-  const turns: ContextTurnStat[] = []
+  interface MutableTurn { index: number; userTokens: number; assistantTokens: number; toolCalls: number; fileRefs: number; imageCount: number }
+  const turns: MutableTurn[] = []
 
-  const turn = (): ContextTurnStat => {
-    let current = turns.at(-1)
-    if (current === undefined || current.index !== turnIndex) {
-      current = { index: turnIndex, userTokens: 0, assistantTokens: 0 }
-      turns.push(current)
-    }
-    return current
+  const turnAt = (index: number): MutableTurn => {
+    const last = turns.at(-1)
+    if (last !== undefined && last.index === index) return last
+    const existing = turns.find(candidate => candidate.index === index)
+    if (existing !== undefined) return existing
+    const created: MutableTurn = { index, userTokens: 0, assistantTokens: 0, toolCalls: 0, fileRefs: 0, imageCount: 0 }
+    turns.push(created)
+    return created
   }
 
   for (const entry of entries) {
@@ -111,9 +119,10 @@ export function summarizeContextWindow(
         fileRefs += files
         imageCount += images
         estimatedChars += chars
-        const tokens = Math.ceil(chars / CHARS_PER_TOKEN)
-        const current = turn()
-        turns[turns.length - 1] = { ...current, userTokens: current.userTokens + tokens }
+        const current = turnAt(turnIndex)
+        current.userTokens += Math.ceil(chars / CHARS_PER_TOKEN)
+        current.fileRefs += files
+        current.imageCount += images
         break
       }
       case 'assistant/message': {
@@ -125,14 +134,18 @@ export function summarizeContextWindow(
         imageCount += images
         estimatedChars += chars
         assistantOutputTokens += output
-        const tokens = output > 0 ? output : Math.ceil(chars / CHARS_PER_TOKEN)
-        const current = turn()
-        turns[turns.length - 1] = { ...current, assistantTokens: current.assistantTokens + tokens }
+        const current = turnAt(turnIndex)
+        current.assistantTokens += output > 0 ? output : Math.ceil(chars / CHARS_PER_TOKEN)
+        current.fileRefs += files
+        current.imageCount += images
         break
       }
-      case 'tool/call':
+      case 'tool/call': {
         toolCalls += 1
+        const turnNumber = (data as { readonly turn?: unknown })?.turn
+        turnAt(typeof turnNumber === 'number' ? turnNumber : turnIndex).toolCalls += 1
         break
+      }
       case 'tool/result':
         toolResults += 1
         break

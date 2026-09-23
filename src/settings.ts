@@ -7,7 +7,6 @@ export interface BetterComposerSettings {
   markdownVisual: boolean
   diagnostics: boolean
   toolbarMode: ToolbarMode
-  deterministicAssistance: boolean
   /** Minimum pasted-text length that converts into a clip chip; 0 disables. */
   pasteClipThreshold: number
 }
@@ -21,7 +20,6 @@ export const DEFAULT_SETTINGS: Readonly<BetterComposerSettings> = Object.freeze(
   markdownVisual: true,
   diagnostics: true,
   toolbarMode: 'compact',
-  deterministicAssistance: false,
   pasteClipThreshold: 4000,
 })
 
@@ -43,9 +41,6 @@ export function normalizeSettings(value: unknown): BetterComposerSettings {
     toolbarMode: record.toolbarMode === 'hidden' || record.toolbarMode === 'compact'
       ? record.toolbarMode
       : DEFAULT_SETTINGS.toolbarMode,
-    deterministicAssistance: typeof record.deterministicAssistance === 'boolean'
-      ? record.deterministicAssistance
-      : DEFAULT_SETTINGS.deterministicAssistance,
     pasteClipThreshold: typeof record.pasteClipThreshold === 'number'
       && Number.isFinite(record.pasteClipThreshold) && record.pasteClipThreshold >= 0
       ? Math.floor(record.pasteClipThreshold)
