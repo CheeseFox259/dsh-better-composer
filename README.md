@@ -3,7 +3,7 @@ description: "Adds deterministic Markdown presentation and local editing aids to
 kind: "package-bundle"
 ---
 
-# @dsh-better-composer
+# @cheesefox/dsh-better-composer
 
 English | [中文](README.zh.md)
 

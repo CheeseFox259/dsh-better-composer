@@ -10,7 +10,7 @@ import {
 } from './context-map.ts'
 
 /** The context-map tab's registry identity and page kind. */
-export const CONTEXT_MAP_TAB_ID = '@noleftbutright/dsh-better-composer.contextmap'
+export const CONTEXT_MAP_TAB_ID = '@cheesefox/dsh-better-composer.contextmap'
 export const CONTEXT_MAP_TAB_KIND = 'better-composer.contextmap'
 
 /** Page-type definition registered into the right Sidebar. */

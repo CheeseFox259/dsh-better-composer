@@ -1,7 +1,7 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import css from './styles.css?inline'
 
-const PLUGIN_ID = '@noleftbutright/dsh-better-composer'
+const PLUGIN_ID = '@cheesefox/dsh-better-composer'
 
 /** Mount the plugin stylesheet for exactly the client contribution lifetime. */
 export function installStyles(ctx: ClientContext): void {

@@ -38,9 +38,9 @@ const loadResultSchema = {
 
 /** Hand-written Remote contribution; the host side is discovered via SRC markers. */
 export const betterComposerRemoteContribution = {
-  package: '@noleftbutright/dsh-better-composer',
+  package: '@cheesefox/dsh-better-composer',
   descriptors: [{
-    id: '@noleftbutright/dsh-better-composer#betterComposer/storePaste',
+    id: '@cheesefox/dsh-better-composer#betterComposer/storePaste',
     service: 'betterComposer',
     namespace: 'betterComposer',
     method: 'storePaste',
@@ -49,15 +49,15 @@ export const betterComposerRemoteContribution = {
       name: 'request',
       wire: 'request',
       source: 'json',
-      codec: { mode: 'strict', typeSymbol: '@noleftbutright/dsh-better-composer#ClipRecord', schema: clipRecordSchema },
+      codec: { mode: 'strict', typeSymbol: '@cheesefox/dsh-better-composer#ClipRecord', schema: clipRecordSchema },
     }],
     result: {
       mode: 'strict',
-      typeSymbol: '@noleftbutright/dsh-better-composer#betterComposer/storePaste:result',
+      typeSymbol: '@cheesefox/dsh-better-composer#betterComposer/storePaste:result',
       schema: storedResultSchema,
     },
   }, {
-    id: '@noleftbutright/dsh-better-composer#betterComposer/loadPaste',
+    id: '@cheesefox/dsh-better-composer#betterComposer/loadPaste',
     service: 'betterComposer',
     namespace: 'betterComposer',
     method: 'loadPaste',
@@ -68,7 +68,7 @@ export const betterComposerRemoteContribution = {
       source: 'json',
       codec: {
         mode: 'strict',
-        typeSymbol: '@noleftbutright/dsh-better-composer#betterComposer/loadPaste:request',
+        typeSymbol: '@cheesefox/dsh-better-composer#betterComposer/loadPaste:request',
         schema: {
           parse(value: unknown): { id: string } {
             if (value === null || typeof value !== 'object') throw new Error('expected request')
@@ -81,11 +81,11 @@ export const betterComposerRemoteContribution = {
     }],
     result: {
       mode: 'strict',
-      typeSymbol: '@noleftbutright/dsh-better-composer#betterComposer/loadPaste:result',
+      typeSymbol: '@cheesefox/dsh-better-composer#betterComposer/loadPaste:result',
       schema: loadResultSchema,
     },
   }, {
-    id: '@noleftbutright/dsh-better-composer#betterComposer/publishPaste',
+    id: '@cheesefox/dsh-better-composer#betterComposer/publishPaste',
     service: 'betterComposer',
     namespace: 'betterComposer',
     method: 'publishPaste',
@@ -96,7 +96,7 @@ export const betterComposerRemoteContribution = {
       source: 'json',
       codec: {
         mode: 'strict',
-        typeSymbol: '@noleftbutright/dsh-better-composer#betterComposer/publishPaste:request',
+        typeSymbol: '@cheesefox/dsh-better-composer#betterComposer/publishPaste:request',
         schema: {
           parse(value: unknown): { id: string; cwd: string } {
             if (value === null || typeof value !== 'object') throw new Error('expected request')
@@ -109,7 +109,7 @@ export const betterComposerRemoteContribution = {
     }],
     result: {
       mode: 'strict',
-      typeSymbol: '@noleftbutright/dsh-better-composer#betterComposer/publishPaste:result',
+      typeSymbol: '@cheesefox/dsh-better-composer#betterComposer/publishPaste:result',
       schema: {
         parse(value: unknown): { path: string; bytes: number } {
           if (value === null || typeof value !== 'object') throw new Error('expected result')
@@ -120,7 +120,7 @@ export const betterComposerRemoteContribution = {
       },
     },
   }, {
-    id: '@noleftbutright/dsh-better-composer#betterComposer/editText',
+    id: '@cheesefox/dsh-better-composer#betterComposer/editText',
     service: 'betterComposer',
     namespace: 'betterComposer',
     method: 'editText',
@@ -131,7 +131,7 @@ export const betterComposerRemoteContribution = {
       source: 'json',
       codec: {
         mode: 'strict',
-        typeSymbol: '@noleftbutright/dsh-better-composer#betterComposer/editText:request',
+        typeSymbol: '@cheesefox/dsh-better-composer#betterComposer/editText:request',
         schema: {
           parse(value: unknown): {
             provider: string
@@ -163,7 +163,7 @@ export const betterComposerRemoteContribution = {
     cancellation: { parameter: 'signal' },
     result: {
       mode: 'strict',
-      typeSymbol: '@noleftbutright/dsh-better-composer#betterComposer/editText:result',
+      typeSymbol: '@cheesefox/dsh-better-composer#betterComposer/editText:result',
       schema: {
         parse(value: unknown): { text: string } {
           if (value === null || typeof value !== 'object') throw new Error('expected result')

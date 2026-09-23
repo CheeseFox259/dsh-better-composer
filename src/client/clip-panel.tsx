@@ -5,7 +5,7 @@ import type { ClipMode, ClipStore } from './clip-store.ts'
 import type { BetterComposerRemoteFace } from './remote.ts'
 
 /** The clip tab's registry identity and page kind. */
-export const CLIP_TAB_ID = '@noleftbutright/dsh-better-composer'
+export const CLIP_TAB_ID = '@cheesefox/dsh-better-composer'
 export const CLIP_TAB_KIND = 'better-composer.clip'
 
 /** The page-type definition registered into the right Sidebar. */

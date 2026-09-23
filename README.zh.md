@@ -3,12 +3,12 @@ description: "为 DSH Web Composer 提供确定性的 Markdown 视觉呈现与�
 kind: "package-bundle"
 ---
 
-# @noleftbutright/dsh-better-composer
+# @cheesefox/dsh-better-composer
 
 [English](README.md) | 中文
 
 [![CI](https://github.com/CheeseFox259/dsh-better-composer/actions/workflows/ci.yml/badge.svg)](https://github.com/CheeseFox259/dsh-better-composer/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@noleftbutright/dsh-better-composer)](https://www.npmjs.com/package/@noleftbutright/dsh-better-composer)
+[![npm](https://img.shields.io/npm/v/@cheesefox/dsh-better-composer)](https://www.npmjs.com/package/@cheesefox/dsh-better-composer)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## 摘要
@@ -36,7 +36,7 @@ DSH Better Composer 为 DSH Web Composer 增加保留 source 的 Markdown 视觉
 从 npm 安装已发布的包：
 
 ```sh
-pnpm dsh plugin --profile web add @noleftbutright/dsh-better-composer
+pnpm dsh plugin --profile web add @cheesefox/dsh-better-composer
 ```
 
 或从源码安装：
@@ -49,7 +49,7 @@ pnpm dsh plugin --profile web add ./dsh-better-composer
 移除：
 
 ```sh
-pnpm dsh plugin --profile web remove @noleftbutright/dsh-better-composer
+pnpm dsh plugin --profile web remove @cheesefox/dsh-better-composer
 ```
 
 本包是 `dsh.bundle.patch` profile layer。该 patch 向当前 profile 插入一个 `dsh-better-composer` 行。客户端入口只在 Web 平台加载，并依赖 `package.json` 声明的 conversation、renderer、Settings 和 Settings-plugin 公开包。
