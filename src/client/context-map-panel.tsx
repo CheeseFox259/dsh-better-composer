@@ -6,6 +6,7 @@ import {
   buildContextBrowser,
   type ContextBrowserModel,
   type ContextSummary,
+  type ContextTurnStat,
 } from './context-map.ts'
 
 /** The context-map tab's registry identity and page kind. */
@@ -29,6 +30,10 @@ export interface ContextMapProbe {
   projection(key: 'contextPressure' | 'contextBreakdown' | 'tokenUsage'): unknown
   events(): { readonly entries: readonly unknown[]; readonly revision: number }
   draftClips(): number
+  /** True while the full-history pull is paging earlier events in. */
+  historyLoading(): boolean
+  /** Page the event window back to the session start (idempotent, fail-open). */
+  loadAllHistory(): void
   /** Run `/compact` on the session. */
   compact(): Promise<void>
   /** Fork the session after the turn ending at `endSeq`. */
@@ -114,11 +119,13 @@ export function ContextMapPanel({ sessionId = '', probe }: ContextMapPanelProps)
   const [tab, setTab] = useState<BrowserTab>('messages')
   const [hoverKind, setHoverKind] = useState<BrowserTab | undefined>()
   const [expanded, setExpanded] = useState<readonly string[]>([])
+  const [selectedTurn, setSelectedTurn] = useState<number | undefined>()
   const [confirmingCompact, setConfirmingCompact] = useState(false)
   const [compactError, setCompactError] = useState('')
   const [forkNotice, setForkNotice] = useState('')
   const [anchors, setAnchors] = useState<readonly number[]>(() => loadTurnAnchors(String(sessionId)))
 
+  useEffect(() => { probe.loadAllHistory() }, [probe])
   useEffect(() => { setAnchors(loadTurnAnchors(String(sessionId))) }, [sessionId])
   useEffect(() => {
     if (forkNotice === '') return
@@ -132,6 +139,11 @@ export function ContextMapPanel({ sessionId = '', probe }: ContextMapPanelProps)
       : [...previous, key])
   }
   const isOpen = (key: string): boolean => expanded.includes(key)
+  const revealTurn = (index: number): void => {
+    setTab('messages')
+    const key = `turn:${index}`
+    setExpanded(previous => previous.includes(key) ? previous : [...previous, key])
+  }
   const toggleAnchor = (turn: number): void => {
     setAnchors(previous => {
       const next = previous.includes(turn) ? previous.filter(candidate => candidate !== turn) : [...previous, turn]
@@ -257,7 +269,7 @@ export function ContextMapPanel({ sessionId = '', probe }: ContextMapPanelProps)
         <li onMouseEnter={() => { setHoverKind('tools') }} onMouseLeave={() => { setHoverKind(undefined) }}><i data-kind="tools" />工具 · {formatTokens(toolsTokens)}</li>
         <li onMouseEnter={() => { setHoverKind('messages') }} onMouseLeave={() => { setHoverKind(undefined) }}><i data-kind="messages" />消息 · {formatTokens(messagesTokens)}</li>
       </ul>
-      <BrowserSection tab={tab} browser={browser} isOpen={isOpen} toggle={toggle} anchors={anchors} onAnchor={toggleAnchor} onFork={runFork} />
+      <BrowserSection tab={tab} browser={browser} isOpen={isOpen} toggle={toggle} anchors={anchors} onAnchor={toggleAnchor} onFork={runFork} loading={probe.historyLoading()} />
     </section>
 
     {hasUsage || cacheRead > 0
@@ -302,20 +314,86 @@ export function ContextMapPanel({ sessionId = '', probe }: ContextMapPanelProps)
         <span className="dsh-better-composer-ctxmap-card-note">最近 {summary.turns.length} 轮</span>
       </header>
       {summary.turns.length === 0
-        ? <p className="dsh-better-composer-ctxmap-sub">暂无对话内容</p>
-        : <div className="dsh-better-composer-ctxmap-bars" aria-hidden>
-          {summary.turns.map(turn => <span key={turn.index} className="dsh-better-composer-ctxmap-bar" data-anchored={anchors.includes(turn.index) ? 'true' : undefined} title={`第 ${turn.index} 轮 · ${formatTokens(turn.userTokens + turn.assistantTokens)} tokens${anchors.includes(turn.index) ? ' · 已锚定' : ''}`}>
+        ? <p className="dsh-better-composer-ctxmap-sub">{probe.historyLoading() ? '正在加载更早历史…' : '暂无对话内容'}</p>
+        : <div className="dsh-better-composer-ctxmap-bars" role="group" aria-label="逐轮 tokens">
+          {summary.turns.map(turn => <button
+            key={turn.index}
+            type="button"
+            className="dsh-better-composer-ctxmap-bar"
+            data-anchored={anchors.includes(turn.index) ? 'true' : undefined}
+            data-selected={selectedTurn === turn.index ? 'true' : undefined}
+            aria-pressed={selectedTurn === turn.index}
+            aria-label={`第 ${turn.index} 轮 · ${formatTokens(turn.userTokens + turn.assistantTokens)} tokens`}
+            title={`第 ${turn.index} 轮 · ${formatTokens(turn.userTokens + turn.assistantTokens)} tokens${anchors.includes(turn.index) ? ' · 已锚定' : ''}`}
+            onClick={() => { setSelectedTurn(previous => previous === turn.index ? undefined : turn.index) }}
+          >
             <i data-kind="assistant" style={{ height: `${turn.assistantTokens / turnMax * 100}%` }} />
             <i data-kind="user" style={{ height: `${turn.userTokens / turnMax * 100}%` }} />
-          </span>)}
+          </button>)}
         </div>}
-      <p className="dsh-better-composer-ctxmap-sub">在「构成 · 消息」中锚定某轮后，此处显示金色刻线。</p>
+      {selectedTurn !== undefined ? <TurnDetail
+        turn={selectedTurn}
+        stat={summary.turns.find(candidate => candidate.index === selectedTurn)}
+        browser={browser}
+        anchored={anchors.includes(selectedTurn)}
+        onAnchor={toggleAnchor}
+        onReveal={revealTurn}
+      /> : null}
+      <p className="dsh-better-composer-ctxmap-sub">点击轮次柱查看该轮构成；锚定后此处显示金色刻线。</p>
     </section>
   </div>
 }
 
+/** Per-turn composition drill-down under the growth chart. */
+function TurnDetail({
+  turn, stat, browser, anchored, onAnchor, onReveal,
+}: {
+  readonly turn: number
+  readonly stat: ContextTurnStat | undefined
+  readonly browser: ContextBrowserModel
+  readonly anchored: boolean
+  readonly onAnchor: (turn: number) => void
+  readonly onReveal: (turn: number) => void
+}) {
+  const browserTurn = browser.turns.find(candidate => candidate.index === turn)
+  const toolCounts = new Map<string, number>()
+  for (const step of browserTurn?.steps ?? []) {
+    for (const name of step.toolNames) toolCounts.set(name, (toolCounts.get(name) ?? 0) + 1)
+  }
+  const topTools = [...toolCounts.entries()].sort((left, right) => right[1] - left[1]).slice(0, 6)
+  return <div className="dsh-better-composer-ctxmap-turn-detail" data-turn-detail={turn}>
+    <div className="dsh-better-composer-ctxmap-turn-detail-head">
+      <strong>第 {turn} 轮</strong>
+      <span className="dsh-better-composer-ctxmap-turn-detail-actions">
+        <button type="button" className="dsh-better-composer-ctxmap-icon" aria-pressed={anchored}
+          aria-label={anchored ? `取消锚定第 ${turn} 轮` : `锚定第 ${turn} 轮`}
+          onClick={() => { onAnchor(turn) }}>{anchored ? '◆' : '◇'}</button>
+        <button type="button" className="dsh-better-composer-ctxmap-action" onClick={() => { onReveal(turn) }}>在消息中查看</button>
+      </span>
+    </div>
+    {stat !== undefined
+      ? <div className="dsh-better-composer-ctxmap-grid">
+        <div className="dsh-better-composer-ctxmap-stat"><strong>{formatTokens(stat.userTokens)}</strong><span>用户 tokens</span></div>
+        <div className="dsh-better-composer-ctxmap-stat"><strong>{formatTokens(stat.assistantTokens)}</strong><span>助手 tokens</span></div>
+        <div className="dsh-better-composer-ctxmap-stat"><strong>{stat.toolCalls}</strong><span>工具调用</span></div>
+        <div className="dsh-better-composer-ctxmap-stat"><strong>{stat.fileRefs + stat.imageCount}</strong><span>文件与图片</span></div>
+      </div>
+      : null}
+    {browserTurn !== undefined
+      ? <p className="dsh-better-composer-ctxmap-sub">{browserTurn.steps.length} 步 · 用户 {formatTokens(Math.ceil(browserTurn.userChars / 4))} · 输出 {formatTokens(browserTurn.outputTokens)} tok</p>
+      : null}
+    {topTools.length > 0
+      ? <div className="dsh-better-composer-ctxmap-chips">
+        {topTools.map(([name, count]) => <span key={name} className="dsh-better-composer-ctxmap-chip" data-kind={isMcpTool(name) ? 'mcp' : 'tool'}>
+          {isMcpTool(name) ? '⚙ ' : '› '}{name}{count > 1 ? ` ×${count}` : ''}
+        </span>)}
+      </div>
+      : null}
+  </div>
+}
+
 function BrowserSection({
-  tab, browser, isOpen, toggle, anchors, onAnchor, onFork,
+  tab, browser, isOpen, toggle, anchors, onAnchor, onFork, loading,
 }: {
   readonly tab: BrowserTab
   readonly browser: ContextBrowserModel
@@ -324,11 +402,14 @@ function BrowserSection({
   readonly anchors: readonly number[]
   readonly onAnchor: (turn: number) => void
   readonly onFork: (endSeq: number) => Promise<void>
+  readonly loading: boolean
 }) {
+  const loadingNote = loading ? <p className="dsh-better-composer-ctxmap-sub" role="status">正在加载更早历史…</p> : null
   if (tab === 'system') {
     const nodes = [...browser.systemNodes].reverse()
-    if (nodes.length === 0) return <p className="dsh-better-composer-ctxmap-sub">窗口内暂无系统提示词（可能在更早的历史中）。</p>
+    if (nodes.length === 0) return <div>{loadingNote ?? <p className="dsh-better-composer-ctxmap-sub">本会话暂无系统提示词记录。</p>}</div>
     return <div className="dsh-better-composer-ctxmap-browser">
+      {loadingNote}
       {nodes.map((node, position) => {
         const key = `system:${node.seq}`
         return <div key={key} className="dsh-better-composer-ctxmap-row-group">
@@ -347,8 +428,9 @@ function BrowserSection({
   }
 
   if (tab === 'tools') {
-    if (browser.tools.length === 0) return <p className="dsh-better-composer-ctxmap-sub">窗口内暂无工具定义（可能在更早的历史中）。</p>
+    if (browser.tools.length === 0) return <div>{loadingNote ?? <p className="dsh-better-composer-ctxmap-sub">本会话暂无工具定义记录。</p>}</div>
     return <div className="dsh-better-composer-ctxmap-browser">
+      {loadingNote}
       {browser.headerRoute !== undefined && browser.headerRoute !== ''
         ? <p className="dsh-better-composer-ctxmap-sub">请求路由 · {browser.headerRoute} · {browser.tools.length} 个工具</p>
         : null}
@@ -369,8 +451,9 @@ function BrowserSection({
     </div>
   }
 
-  if (browser.turns.length === 0) return <p className="dsh-better-composer-ctxmap-sub">窗口内暂无消息（可能在更早的历史中）。</p>
+  if (browser.turns.length === 0) return <div>{loadingNote ?? <p className="dsh-better-composer-ctxmap-sub">本会话暂无消息记录。</p>}</div>
   return <div className="dsh-better-composer-ctxmap-browser">
+    {loadingNote}
     {[...browser.turns].reverse().map(turn => {
       const key = `turn:${turn.index}`
       const anchored = anchors.includes(turn.index)

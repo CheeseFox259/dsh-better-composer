@@ -28,7 +28,7 @@ describe('context window summary', () => {
     expect(summary.assistantOutputTokens).toBe(60)
     expect(summary.estimatedMessageTokens).toBe(150)
     expect(summary.turns).toHaveLength(1)
-    expect(summary.turns[0]).toEqual({ index: 1, userTokens: 100, assistantTokens: 60 })
+    expect(summary.turns[0]).toEqual({ index: 1, userTokens: 100, assistantTokens: 60, toolCalls: 1, fileRefs: 1, imageCount: 0 })
   })
 
   it('starts a new turn per user message and keeps the last twenty', () => {

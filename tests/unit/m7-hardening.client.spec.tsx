@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createEditorContribution } from '../../src/client/editor.tsx'
-import { deterministicAssistanceForSegments } from '../../src/markdown/assistance.ts'
 import { markdownCompletion } from '../../src/markdown/completion.ts'
 import { diagnosticsForSegments } from '../../src/markdown/diagnostics.ts'
 import { createMarkdownProvider } from '../../src/markdown/provider.ts'
@@ -27,16 +26,12 @@ describe('M7 bounded optional presentation', () => {
     })).toEqual([])
   })
 
-  it('bounds diagnostics and deterministic assistance for oversized segments', () => {
+  it('bounds diagnostics for oversized segments', () => {
     const draft = `${oversizedStructuredDraft()}\ninline \`code`
 
     expect(diagnosticsForSegments({
       draftRev: 2,
       segments: [{ sourceStart: 0, text: draft }],
-    })).toEqual([])
-    expect(deterministicAssistanceForSegments({
-      draftRev: 2,
-      segments: [{ sourceStart: 0, text: oversizedStructuredDraft() }],
     })).toEqual([])
   })
 

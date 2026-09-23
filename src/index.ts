@@ -15,7 +15,6 @@ export const Config: z<BetterComposerSettings> = z.object({
   markdownVisual: z.boolean().default(DEFAULT_SETTINGS.markdownVisual),
   diagnostics: z.boolean().default(DEFAULT_SETTINGS.diagnostics),
   toolbarMode: z.union(['compact', 'hidden'] as const).default(DEFAULT_SETTINGS.toolbarMode),
-  deterministicAssistance: z.boolean().default(DEFAULT_SETTINGS.deterministicAssistance),
   pasteClipThreshold: z.number().default(DEFAULT_SETTINGS.pasteClipThreshold),
   // Published schemastery lines infer slightly different schema generics;
   // the runtime host validates against this exact schema object.

@@ -7,9 +7,15 @@ kind: "package-bundle"
 
 English | [中文](README.zh.md)
 
+[![CI](https://github.com/CheeseFox259/dsh-better-composer/actions/workflows/ci.yml/badge.svg)](https://github.com/CheeseFox259/dsh-better-composer/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@noleftbutright/dsh-better-composer)](https://www.npmjs.com/package/@noleftbutright/dsh-better-composer)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 ## Summary
 
-DSH Better Composer adds source-preserving Markdown presentation, fixed local completion candidates, diagnostics, and deterministic writing hints to a DSH Web Composer. The profile layer contributes Settings and editor presentation through the public DSH composer seams. DSH Core remains the owner of source, selection, history, Context Objects, and Send/Queue/Steer. Long pastes can convert into editable reference chips whose LLM-assisted rewriting runs as an independent one-shot call outside the session event stream.
+DSH Better Composer adds source-preserving Markdown presentation, fixed local completion candidates, and diagnostics to a DSH Web Composer. The profile layer contributes Settings and editor presentation through the public DSH composer seams. DSH Core remains the owner of source, selection, history, Context Objects, and Send/Queue/Steer. Long pastes can convert into editable reference chips whose LLM-assisted rewriting runs as an independent one-shot call outside the session event stream.
+
+![Live Markdown presentation in the composer — syntax markers reappear on the active line](https://raw.githubusercontent.com/CheeseFox259/dsh-better-composer/main/docs/screenshots/markdown-visual.png)
 
 ## Table of Contents
 
@@ -36,7 +42,7 @@ pnpm dsh plugin --profile web add @noleftbutright/dsh-better-composer
 Or install from source:
 
 ```sh
-git clone https://github.com/NoLeftButRight/dsh-better-composer.git
+git clone https://github.com/CheeseFox259/dsh-better-composer.git
 pnpm dsh plugin --profile web add ./dsh-better-composer
 ```
 
@@ -53,12 +59,17 @@ The package is a `dsh.bundle.patch` profile layer. The patch inserts one `dsh-be
 - Markdown visual enhancement for headings, emphasis, links, task lists, quotes, tables, fenced code, and source-preserving attachment labels.
 - Deterministic local completion for approved fence-language, task-marker, and heading-spacing candidates, plus a bounded ghost for approved prompt-section headings.
 - Non-blocking diagnostics for the supported incomplete Markdown constructs.
-- Optional deterministic writing assistance based only on one current Core Composer snapshot.
-- Context map (composer toolbar icon opens the right sidebar): occupancy gauge (measured tokens / model window), composition stack, structure stats, and per-turn growth — all push-updated live; the composition card drills down 消息 → turn → step (trace) → full message text, with the system prompt and tool inventory (from request/header) also viewable in full.
+- Context map (composer toolbar icon opens the right sidebar): occupancy gauge (measured tokens / model window), composition stack, structure stats, and per-turn growth — all push-updated live, computed over the full session history rather than the currently loaded window. The composition card drills down 消息 → turn → step (trace) → full message text, and each bar in the growth chart opens a per-turn breakdown (user/assistant tokens, tool calls, files and images) with one-click anchoring and jump-to-message; the system prompt and tool inventory (from request/header) are viewable in full.
+
+  ![Context map — occupancy, composition, per-turn cards, and cache stats](https://raw.githubusercontent.com/CheeseFox259/dsh-better-composer/main/docs/screenshots/context-map.png)
+
 - Context management: run `/compact` in-place (with confirmation and a compacting state; compaction checkpoints are marked on turns); fork a new session after any closed turn; pin turns as anchors shown as gold ticks on the growth chart.
 - Cache visualization: hit rate, current-context cache coverage, and read/write tokens (provider prefix caching, automatic).
 - Long-paste conversion into an editable "pasted text" chip (threshold adjustable in Settings; 0 disables): delivery is selectable per chip — inline into the prompt at submit time, or materialized as a workspace file the agent reads on demand. Clicking the chip opens a right-sidebar editor supporting manual edits and instruction-driven LLM rewriting (a one-shot call outside the session event stream, optionally carrying recent session messages as reference).
-- Five Settings controls: enable Better Composer, Markdown visual enhancement, Markdown syntax hints, deterministic writing assistance, and the long-paste threshold. The legacy `toolbarMode` field remains schema-compatible and is not a separate UI toggle.
+
+  ![A long paste collapses into an editable chip](https://raw.githubusercontent.com/CheeseFox259/dsh-better-composer/main/docs/screenshots/paste-clip.png)
+
+- Four Settings controls: enable Better Composer, Markdown visual enhancement, Markdown syntax hints, and the long-paste threshold. The legacy `toolbarMode` field remains schema-compatible and is not a separate UI toggle.
 
 -----
 
@@ -70,11 +81,9 @@ The package is a `dsh.bundle.patch` profile layer. The patch inserts one `dsh-be
 
 The Host entry in [`src/index.ts`](src/index.ts) installs the Settings schema, the client bundle, and the `betterComposer` Remote service (`@Remote` runtime markers, no generated artifacts). [`cordis.patch.yml`](cordis.patch.yml) adds the bundle to a profile. [`src/client/index.ts`](src/client/index.ts) owns effect-scoped registration and disposal for Settings, decorations, actions, the editor surface, the Settings card, the clip source, and the right-sidebar tab.
 
-The Markdown provider parses the authoritative Composer snapshot and emits UTF-16 source ranges. The editor surface presents those ranges through Core's generic decoration and surface-extension seams. Completion acceptance and language changes use the existing Core transaction path. Ghost text, diagnostics, tables, code controls, and deterministic assistance are presentation only; they never create a second source, selection, history, Context Object, or submission path.
+The Markdown provider parses the authoritative Composer snapshot and emits UTF-16 source ranges. The editor surface presents those ranges through Core's generic decoration and surface-extension seams. Completion acceptance and language changes use the existing Core transaction path. Ghost text, diagnostics, tables, and code controls are presentation only; they never create a second source, selection, history, Context Object, or submission path.
 
 Paste clips (`@clip:<id>`) work by detecting a single-revision length jump via prefix/suffix diff, replacing the inserted span with a chip through the public `setDraft(text, references)` verb, and expanding the chip at submit time through a registered `inputTriggers` codec — either the full text (inline) or a workspace-file handle (file mode, where the Host writes the text under `<cwd>/.dsh/pastes/`). Clip payloads persist under the harness home so reloads never lose them. The right-sidebar editor registers through `sidebarRightTabs` + `sidebar.right.pane.tab`; its LLM rewrite calls the Host `editText` Remote method with an independent purpose and appends nothing to the session event log.
-
-The assistance rule is intentionally small: it may show a fixed Validation-section reminder when a current text segment contains a recognized Goal or Task heading and a fenced code block without a recognized Validation or Acceptance Criteria heading. It does not score prompts, infer intent, rewrite source, or call a model.
 
 </details>
 

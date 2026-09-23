@@ -3,9 +3,9 @@
 .dsh-better-composer-completion-popup li { min-width: 0; padding: 3px 6px; border-radius: 4px; }
 .dsh-better-composer-completion-popup li[aria-selected="true"] { background: var(--dsw-alias-interactive-bg-hover); }
 .dsh-better-composer-completion-ghost { color: var(--dsw-alias-label-tertiary); opacity: .65; font-size: 12px; }
-.dsh-better-composer-diagnostics, .dsh-better-composer-assistance { min-width: 0; max-width: 100%; margin: 0; padding: 0; font-size: 12px; list-style: none; overflow-wrap: anywhere; }
+.dsh-better-composer-diagnostics, .dsh-better-composer-hints { min-width: 0; max-width: 100%; margin: 0; padding: 0; font-size: 12px; list-style: none; overflow-wrap: anywhere; }
 .dsh-better-composer-diagnostics { color: var(--dsw-alias-state-error-primary); }
-.dsh-better-composer-assistance { color: var(--dsw-alias-label-tertiary); }
+.dsh-better-composer-hints { color: var(--dsw-alias-label-tertiary); }
 .dsh-better-composer-guidance { margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
 .dsh-better-composer-marker { color: var(--dsw-alias-label-tertiary); opacity: .3; }
 .dsh-better-composer-marker-hidden, .dsh-better-composer-fence-marker-hidden { color: transparent; opacity: 0; }
@@ -258,6 +258,12 @@
 .dsh-better-composer-ctxmap-action-note { min-width: 0; font-size: 11px; color: var(--dsw-alias-label-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dsh-better-composer-ctxmap-gauge-fill[data-level='cache'] { background: linear-gradient(90deg, color-mix(in srgb, #2f9e6e 75%, transparent), #2f9e6e); }
 .dsh-better-composer-ctxmap-bar[data-anchored='true'] { outline: 1.5px solid #d9971a; outline-offset: 1px; }
+button.dsh-better-composer-ctxmap-bar { margin: 0; padding: 0; border: 0; cursor: pointer; font: inherit; }
+button.dsh-better-composer-ctxmap-bar:hover { filter: brightness(1.08); }
+button.dsh-better-composer-ctxmap-bar[data-selected='true'] { outline: 1.5px solid var(--dsw-alias-state-business-primary); outline-offset: 1px; }
+.dsh-better-composer-ctxmap-turn-detail { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 10px 12px; background: var(--dsw-alias-bg-layer-2); }
+.dsh-better-composer-ctxmap-turn-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dsh-better-composer-ctxmap-turn-detail-actions { display: flex; align-items: center; gap: 6px; }
 /* Context browser v2: segment focus, chips, refined rows */
 .dsh-better-composer-ctxmap-stack-seg { transition: width .45s cubic-bezier(.2,.8,.3,1), opacity .2s ease, filter .2s ease, transform .2s ease; }
 .dsh-better-composer-ctxmap-stack-seg[data-dim='true'] { opacity: .3; }

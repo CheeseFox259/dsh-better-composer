@@ -72,14 +72,6 @@ export function BetterComposerSettingsCard({ settings }: BetterComposerSettingsC
           </label>
           <label className="dsh-better-composer-settings-row">
             <span className="dsh-better-composer-settings-copy">
-              <strong>确定性写作辅助</strong>
-              <small>仅显示固定的本地结构提醒，不修改内容或阻止发送。</small>
-            </span>
-            <input aria-label="确定性写作辅助" type="checkbox" checked={current.deterministicAssistance}
-              onChange={event => { update('deterministicAssistance', event.target.checked) }} />
-          </label>
-          <label className="dsh-better-composer-settings-row">
-            <span className="dsh-better-composer-settings-copy">
               <strong>超长粘贴转引用</strong>
               <small>粘贴超过该字符数时自动转为可点击编辑的引用；0 表示关闭。</small>
             </span>

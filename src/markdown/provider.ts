@@ -46,6 +46,14 @@ export function createMarkdownProvider(
             : [])
           const segmentRanges = [...projection.semanticRanges, ...projection.markerRanges, ...projection.fenceRanges, ...projection.structuralRanges].flatMap(range => {
             if (range.target === 'block') {
+              // Reveal policy for content-faking block decorations: while the
+              // caret is inside a list item or thematic break, the raw source
+              // line must show without the synthetic bullet/checkbox/rule that
+              // the block class paints (mirrors the marker-level reveal).
+              if (isContentBlockClass(range.className)) {
+                const owner = innermostContentConstruct(projection.constructs, range)
+                if (owner !== undefined && active.has(owner)) return []
+              }
               const base = offsetRange(range, segment.start)
               if (range.className === 'dsh-better-composer-table-separator') {
                 if (!hasPresentation || composing) return [base]
@@ -140,6 +148,26 @@ function codeBlockEdgeVisibility(
   if (owner === undefined || composing || owner.markers.some(marker =>
     marker.start >= range.start && marker.end <= range.end && sourceRangeIsActive(marker, selection))) return range
   return { ...range, className: `${range.className}-source-hidden` }
+}
+
+/** Block classes that paint synthetic content (bullets, checkboxes, rules). */
+function isContentBlockClass(className: string): boolean {
+  return className === 'dsh-better-composer-bullet'
+    || className === 'dsh-better-composer-ordered'
+    || className === 'dsh-better-composer-task'
+    || className === 'dsh-better-composer-thematic-break'
+}
+
+/** The deepest list/task/thematic-break construct fully containing one block range. */
+function innermostContentConstruct(
+  constructs: readonly MarkdownConstructRecord[],
+  range: { readonly start: number; readonly end: number },
+): MarkdownConstructRecord | undefined {
+  const containing = constructs.filter(record =>
+    (record.kind === 'list' || record.kind === 'task' || record.kind === 'thematic-break')
+    && record.sourceStart <= range.start && range.end <= record.sourceEnd)
+  return containing.sort((a, b) =>
+    (a.sourceEnd - a.sourceStart) - (b.sourceEnd - b.sourceStart) || b.depth - a.depth)[0]
 }
 
 function sourceRangeIsActive(

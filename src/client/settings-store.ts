@@ -62,5 +62,4 @@ function sameSettings(left: BetterComposerSettings, right: BetterComposerSetting
     && left.markdownVisual === right.markdownVisual
     && left.diagnostics === right.diagnostics
     && left.toolbarMode === right.toolbarMode
-    && left.deterministicAssistance === right.deterministicAssistance
 }

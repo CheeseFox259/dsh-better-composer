@@ -7,10 +7,10 @@
   "author": "NoLeftButRight",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NoLeftButRight/dsh-better-composer.git"
+    "url": "git+https://github.com/CheeseFox259/dsh-better-composer.git"
   },
-  "bugs": "https://github.com/NoLeftButRight/dsh-better-composer/issues",
-  "homepage": "https://github.com/NoLeftButRight/dsh-better-composer#readme",
+  "bugs": "https://github.com/CheeseFox259/dsh-better-composer/issues",
+  "homepage": "https://github.com/CheeseFox259/dsh-better-composer#readme",
   "keywords": [
     "dsh",
     "deepseek-harness",
