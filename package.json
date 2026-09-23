@@ -1,5 +1,5 @@
 {
-  "name": "@noleftbutright/dsh-better-composer",
+  "name": "@cheesefox/dsh-better-composer",
   "version": "0.1.0",
   "description": "Markdown presentation, long-paste clips, and a live context map for the DSH web composer — a dsh profile plugin.",
   "type": "module",

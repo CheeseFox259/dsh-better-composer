@@ -1,4 +1,4 @@
 # Add the installed contribution to the active profile's plugin tree.
 - insert:
     - id: dsh-better-composer
-      name: '@noleftbutright/dsh-better-composer'
+      name: '@cheesefox/dsh-better-composer'

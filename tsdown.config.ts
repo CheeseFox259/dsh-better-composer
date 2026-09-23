@@ -1,7 +1,7 @@
 import type { UserConfig } from 'tsdown'
 import { typertPlugin } from '@deepseek-ai/dsh-typert-generator/tsdown'
 
-const PACKAGE_ID = '@noleftbutright/dsh-better-composer'
+const PACKAGE_ID = '@cheesefox/dsh-better-composer'
 const nodeConfig: UserConfig = {
   name: PACKAGE_ID,
   entry: ['src/index.ts'],
