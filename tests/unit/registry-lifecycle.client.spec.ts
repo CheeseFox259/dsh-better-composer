@@ -1,106 +1,96 @@
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from '../../src/client/index.ts'
 
+function makeCtx(cleanups: Array<() => void>) {
+  const once = (dispose: () => void): (() => void) => {
+    let done = false
+    return () => { if (!done) { done = true; dispose() } }
+  }
+  const listeners = new Set<() => void>()
+  const settingsScope = {
+    getSnapshot: () => ({ value: { enabled: true, markdownVisual: true, diagnostics: true, toolbarMode: 'compact' } }),
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    set: vi.fn(async () => {}),
+    unset: vi.fn(async () => {}),
+  }
+  const slots = {
+    register: vi.fn(() => once(vi.fn())),
+    inject: vi.fn((_name: string, callback: () => (() => void)) => {
+      cleanups.push(callback())
+      return once(vi.fn())
+    }),
+  }
+  const ctx = {
+    conversation: {},
+    slots,
+    settingsScope: { bind: vi.fn(() => settingsScope) },
+    configForms: { get: vi.fn(() => settingsScope) },
+    effect: vi.fn((factory: () => () => void) => {
+      const cleanup = factory()
+      cleanups.push(cleanup)
+      return cleanup
+    }),
+  }
+  return { ctx, slots, listeners, once }
+}
+
 describe('plugin registration lifecycle', () => {
   it('keeps every production registration disposer independently reachable', () => {
-    const decorationDispose = vi.fn()
-    const actionDisposers = Array.from({ length: 11 }, () => vi.fn())
-    let actionIndex = 0
     const cleanups: Array<() => void> = []
-    const listeners = new Set<() => void>()
-    const settingsScope = {
-      getSnapshot: () => ({ value: { enabled: true, markdownVisual: true, diagnostics: true, toolbarMode: 'compact' } }),
-      subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
-      set: vi.fn(async () => {}),
-      unset: vi.fn(async () => {}),
-    }
-    const once = (dispose: () => void): (() => void) => {
-      let done = false
-      return () => { if (!done) { done = true; dispose() } }
-    }
-    const ctx = {
-      conversation: {
-        decorations: { register: vi.fn(() => once(decorationDispose)) },
-        actions: { register: vi.fn(() => once(actionDisposers[actionIndex++]!)) },
-      },
-      slots: {
-        register: vi.fn(() => once(vi.fn())),
-        inject: vi.fn((_name: string, callback: () => (() => void)) => {
-          cleanups.push(callback())
-          return once(vi.fn())
-        }),
-      },
-      settingsScope: { bind: vi.fn(() => settingsScope) },
-      effect: vi.fn((factory: () => () => void) => {
-        const cleanup = factory()
-        cleanups.push(cleanup)
-        return cleanup
-      }),
-    }
+    const { ctx, listeners } = makeCtx(cleanups)
+
     apply(ctx as never)
     for (const cleanup of cleanups) cleanup()
     for (const cleanup of cleanups) cleanup()
-    expect(decorationDispose).toHaveBeenCalledOnce()
-    expect(actionDisposers.every(dispose => dispose.mock.calls.length === 1)).toBe(true)
     expect(listeners).toHaveLength(0)
   })
 
-  it('refreshes the decoration registration when live settings change', () => {
-    let value = { enabled: true, markdownVisual: true, diagnostics: true, toolbarMode: 'compact' as const }
-    const scopeListeners = new Set<() => void>()
-    const decorationDisposers = [vi.fn(), vi.fn()]
-    let decorationIndex = 0
+  it('registers the settings card as one official Plugins tab and the markdown overlay as the only composer slot', () => {
     const cleanups: Array<() => void> = []
-    const once = (dispose: () => void): (() => void) => {
-      let done = false
-      return () => { if (!done) { done = true; dispose() } }
-    }
-    const register = vi.fn(() => once(decorationDisposers[decorationIndex++]!))
-    const settingsScope = {
-      getSnapshot: () => ({ value }),
-      subscribe: (listener: () => void) => {
-        scopeListeners.add(listener)
-        return () => { scopeListeners.delete(listener) }
-      },
-      set: vi.fn(async () => {}),
-      unset: vi.fn(async () => {}),
-    }
-    const ctx = {
-      conversation: {
-        decorations: { register },
-        actions: { register: vi.fn(() => once(vi.fn())) },
-      },
-      slots: {
-        register: vi.fn(() => once(vi.fn())),
-        inject: vi.fn((_name: string, callback: () => (() => void)) => {
-          cleanups.push(callback())
-          return once(vi.fn())
-        }),
-      },
-      settingsScope: { bind: vi.fn(() => settingsScope) },
-      effect: vi.fn((factory: () => () => void) => {
-        const cleanup = factory()
-        cleanups.push(cleanup)
-        return cleanup
-      }),
-    }
+    const { ctx, slots } = makeCtx(cleanups)
 
     apply(ctx as never)
-    expect(register).toHaveBeenCalledOnce()
+    const injectedNames = slots.inject.mock.calls.map(call => call[0])
+    expect(injectedNames.filter(name => name === 'settings.plugins.tab')).toHaveLength(1)
+    expect(injectedNames.filter(name => name === 'conversation.input.overlay')).toHaveLength(1)
+    expect(slots.register).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'settings.plugins.tab',
+      id: 'dsh-better-composer',
+      order: expect.any(Number),
+      label: 'Better Composer',
+    }), expect.any(Function))
+    expect(slots.register).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'conversation.input.overlay',
+      id: 'dsh-better-composer.overlay',
+    }), expect.any(Function))
+  })
 
-    value = { ...value, markdownVisual: false }
-    for (const listener of scopeListeners) listener()
+  it('mounts the Remote contribution and publishes the remote face', async () => {
+    const cleanups: Array<() => void> = []
+    const { ctx } = makeCtx(cleanups)
+    let mountedContribution: unknown
+    const mockRemoteService = {
+      publishPaste: vi.fn(),
+      storePaste: vi.fn(),
+      loadPaste: vi.fn(),
+      editText: vi.fn(),
+    }
+    const remote = {
+      $mount: vi.fn(async (contribution: unknown) => {
+        mountedContribution = contribution
+        return async () => {}
+      }),
+    }
+    const fullCtx = {
+      ...ctx,
+      remote,
+      get: vi.fn((name: string) => (name === 'remote.betterComposer' ? mockRemoteService : undefined)),
+    }
 
-    expect(decorationDisposers[0]).toHaveBeenCalledOnce()
-    expect(register).toHaveBeenCalledTimes(2)
-    expect(register.mock.calls[1]?.[0].decorate({
-      sessionId: 's1' as never,
-      draft: '# heading',
-      draftRev: 2,
-      nativeRanges: [],
-    })).toEqual([])
-
-    for (const cleanup of cleanups) cleanup()
-    expect(decorationDisposers[1]).toHaveBeenCalledOnce()
+    apply(fullCtx as never)
+    expect(remote.$mount).toHaveBeenCalled()
+    expect(mountedContribution).toMatchObject({
+      package: '@cheesefox/dsh-better-composer',
+    })
   })
 })

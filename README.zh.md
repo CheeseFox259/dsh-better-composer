@@ -31,28 +31,62 @@ DSH Better Composer 为 DSH Web Composer 增加保留 source 的 Markdown 视觉
 <a id="使用本包"></a>
 ## 使用本包
 
-### 安装到 profile
+### 前置条件
 
-从 npm 安装已发布的包：
+- 已安装原生 DSH，并且可使用 `web` profile。
+- DSH `0.1.7-alpha.2` 或满足本包 peer dependencies 的更新版本。本次发布在 `@deepseek-ai/dsh@0.1.7-alpha.2` 上完成安装验证。
+- Node.js `>=20`、pnpm `>=10`。
+- DSH 能够打开一个工作区目录；文件送达模式需要已知的工作区路径。
+
+先确认原生 DSH 可以启动：
 
 ```sh
-pnpm dsh plugin --profile web add @cheesefox/dsh-better-composer
+dsh --version
+dsh web --no-open
 ```
 
-或从源码安装：
+确认网页能够打开后，停止临时 Web 进程，再把插件加入你实际使用的 Web profile。
+
+### 从 npm 安装正式版
+
+```sh
+pnpm dsh plugin --profile web add @cheesefox/dsh-better-composer@1.0.0
+pnpm dsh web --no-open
+```
+
+打开 DSH 输出的 Web 地址，进入「设置 → 内置插件 → Better Composer」，确认插件已加载。新建会话，确认 Composer 视觉层与 `+` 菜单正常存在。
+
+### 从 GitHub 源码安装
 
 ```sh
 git clone https://github.com/CheeseFox259/dsh-better-composer.git
+cd dsh-better-composer
+pnpm install
+pnpm run bundle
+cd ..
 pnpm dsh plugin --profile web add ./dsh-better-composer
+pnpm dsh web --no-open
 ```
 
-移除：
+源码安装适合开发调试，使用当前 checkout 的代码。它不会修改 DSH Core；本包是 profile bundle patch 加 Host/Client 插件入口。
+
+### 首次安装验收
+
+1. 在 Web UI 中新建会话。
+2. 粘贴超过阈值的文本，确认其变为「粘贴文本」chip。
+3. 打开 chip，选择「文件送达」，在「文件类型」下拉框选择文本或代码扩展名；发送后确认文件写入 `.dsh/pastes/`。
+4. 在粘贴文本编辑页修改内容，测试「撤销」和「重做」；应用智能改写预览后也测试这两个按钮。
+5. 进入「设置 → 内置插件 → Better Composer」调整超长粘贴阈值。文件扩展名属于每个 clip，不在全局设置中选择。
+
+### 卸载
 
 ```sh
 pnpm dsh plugin --profile web remove @cheesefox/dsh-better-composer
 ```
 
-本包是 `dsh.bundle.patch` profile layer。该 patch 向当前 profile 插入一个 `dsh-better-composer` 行。客户端入口只在 Web 平台加载，并依赖 `package.json` 声明的 conversation、renderer、Settings 和 Settings-plugin 公开包。
+修改 profile 组成后重启 Web DSH。卸载会移除插件的 overlay、Settings 卡片、clip source、右侧栏 tab 和 Remote contribution，不会修改已有会话历史或 Core 源码。
+
+本包是 `dsh.bundle.patch` profile layer。该 patch 向当前 profile 插入一个 `dsh-better-composer` 行。客户端入口只在 Web 平台加载，并依赖 `package.json` 声明的 conversation、renderer、Settings 和 Settings-plugin 公开包。本包 peer 下限为 `0.1.7-alpha.1`，本次发布验证使用原生 DSH `0.1.7-alpha.2`。
 
 ### 提供的能力
 
@@ -65,11 +99,11 @@ pnpm dsh plugin --profile web remove @cheesefox/dsh-better-composer
 
 - 上下文管理：地图内直接执行 /compact（带确认与压缩中状态，压缩点在轮次上标记）；任意已结束轮次可一键分叉（fork 出新会话）；轮次可锚定并在增长图上显示金色刻线。
 - 缓存可视化：命中率、当前上下文缓存覆盖与读/写 tokens（provider 前缀缓存自动生效）。
-- 超长粘贴自动转为「粘贴文本」引用 chip（阈值可在 Settings 调整，0 关闭）：发送方式可选「直接进上下文」（提交时完整文本内联）或「以文件形式送达」（文本落盘为工作区文件，Agent 用 read 工具自取）；点击 chip 打开右侧栏编辑器，可手动修改，也可由大模型按指令改写（独立的一次性调用，不写入当前会话事件流，可携带最近若干条会话消息作为参考）。
+- 超长粘贴自动转为「粘贴文本」引用 chip（阈值可在 Settings 调整，0 关闭）：发送方式可选「直接进上下文」（提交时完整文本内联）或「以文件形式送达」（文本落盘为工作区文件，并以官方 `@path` 文件引用语法进入提交）；点击 chip 打开右侧栏编辑器后，选择「文件送达」即可选择文本或代码文件扩展名。编辑器支持手动修改，也可由大模型按指令改写；改写支持停止、预览、应用、撤销、重做和重试（独立的一次性调用，不写入当前会话事件流，可携带最近若干条会话消息与当前推理等级作为参考）。
 
   ![超长粘贴自动收纳为可编辑的 chip](https://raw.githubusercontent.com/CheeseFox259/dsh-better-composer/main/docs/screenshots/paste-clip.png)
 
-- 四个 Settings 控件：启用 Better Composer、Markdown 视觉增强、Markdown 语法提示和超长粘贴转引用阈值。旧的 `toolbarMode` 字段继续兼容读取，但不单独增加 UI 开关。
+- 四个 Settings 控件：启用 Better Composer、Markdown 视觉增强、Markdown 语法提示和超长粘贴转引用阈值。文件送达扩展名在每个粘贴文本编辑页中选择。旧的 `toolbarMode` 字段继续兼容读取，但不单独增加 UI 开关。
 
 -----
 
@@ -83,7 +117,7 @@ pnpm dsh plugin --profile web remove @cheesefox/dsh-better-composer
 
 Markdown provider 读取权威 Composer snapshot 并输出 UTF-16 source range。editor surface 通过 Core 的通用 decoration 与 surface-extension seam 呈现这些 range。补全接受和语言变更都走现有 Core transaction path。ghost、diagnostics、table 和 code controls 都只是 presentation；它们不会创建第二份 source、selection、history、Context Object 或提交路径。
 
-粘贴引用（`@clip:<id>`）的实现：editor surface 用单 revision 长度突增 + 前后缀 diff 检测超长粘贴，经公开的 `setDraft(text, references)` 把片段替换为 chip；`inputTriggers.registerSource` 注册的 codec 在提交时按送达模式展开为完整文本（inline）或工作区文件句柄（file，Host 将文本写入 `<cwd>/.dsh/pastes/`）。chip 原文持久化于 harness home（`storages/better-composer/pastes/`），刷新不丢。右侧栏编辑器经 `sidebarRightTabs` + `sidebar.right.pane.tab` 注册；「用大模型编辑」调用 Host 侧 `editText` Remote 方法，以独立 purpose 发起一次性 LLM 请求，不 append 任何会话事件。
+粘贴引用（`@clip:<id>`）的实现：editor surface 用单 revision 长度突增 + 前后缀 diff 检测超长粘贴，经公开的 `setDraft(text, references)` 把片段替换为 chip；`inputTriggers.registerSource` 注册的 codec 在提交时按送达模式展开为完整文本（inline）或官方风格的工作区文件引用（例如 `@.dsh/pastes/pasted-text-<id>.md`；Host 将文本写入 `<cwd>/.dsh/pastes/`）。chip 原文及扩展名持久化于 harness home（`storages/better-composer/pastes/`），刷新不丢。右侧栏编辑器经 `sidebarRightTabs` + `sidebar.right.pane.tab` 注册；「用大模型编辑」调用 Host 侧 `editText` Remote 方法，以独立 purpose 发起一次性、可取消的 LLM 请求，先返回预览，不 append 任何会话事件。
 
 </details>
 
@@ -103,12 +137,12 @@ Markdown provider 读取权威 Composer snapshot 并输出 UTF-16 source range�
 <a id="模型体验"></a>
 ## 模型体验
 
-「以文件形式送达」的粘贴引用在 prompt 里只呈现为一个文件句柄（文件名、字节数、保存路径与"需要时用 read 工具读取"的指引）；「直接进上下文」则把完整文本内联进用户消息。「用大模型编辑」在会话外发起独立请求，模型看不到会话事件流，只看到插件显式携带的文本、指令和可选的近期消息摘录。
+「以文件形式送达」的粘贴引用在 prompt 里呈现为官方风格的工作区文件引用（`@.dsh/pastes/...`），由 Agent 的正常文件工具按需读取；「直接进上下文」则把完整文本内联进用户消息。「用大模型编辑」在会话外发起独立请求，模型看不到会话事件流，只看到插件显式携带的文本、指令、可选的近期消息摘录和当前推理等级，结果必须先经过用户预览再应用。
 
 <a id="已知限制与暂不处理事项"></a>
 ## 已知限制与暂不处理事项
 
-宿主必须提供声明的 Composer、Settings、input-trigger、右栏与 Remote 公开 seam；老宿主缺失某一项时对应能力单独关闭。支持的代码语言列表是有限且本地的。file 送达模式要求会话工作区路径已知；旧 clip（cwd 捕获前创建）切到 file 模式会在发送时以明确错误阻止而不是静默失败。粘贴检测无法区分粘贴与其他单步大插入（IME 整段提交、undo），阈值可降低误判但不能归零。浏览器验收属于宿主 release 流程；本仓库的自动化检查不能替代维护者的真实浏览器复核。
+宿主必须提供声明的 Composer、Settings、input-trigger、右栏与 Remote 公开 seam；老宿主缺失某一项时对应能力单独关闭。支持的代码语言与文件扩展名列表是有限且本地的。纯插件无法创建 Core 内部的附件 receipt，因此文件送达使用官方工作区 `@path` 引用约定，而不是伪造原生二进制附件。file 送达模式要求会话工作区路径已知；旧 clip（cwd 捕获前创建）切到 file 模式会在发送时以明确错误阻止而不是静默失败。粘贴检测无法区分粘贴与其他单步大插入（IME 整段提交、undo），阈值可降低误判但不能归零。浏览器验收属于宿主 release 流程；本仓库的自动化检查不能替代维护者的真实浏览器复核。
 
 <a id="开发说明"></a>
 ### 开发说明

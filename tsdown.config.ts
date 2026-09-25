@@ -32,6 +32,7 @@ const clientConfig: UserConfig = {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
   },
   outputOptions: {
+    inlineDynamicImports: true,
     entryFileNames: 'client.js',
     banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PACKAGE_ID)}, factory: (require) => {`,
     footer: 'return module.exports; } });',

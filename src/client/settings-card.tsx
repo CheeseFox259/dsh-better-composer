@@ -4,14 +4,6 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type { BetterComposerSettings } from '../settings.ts'
 import type { BetterComposerSettingsStore } from './settings-store.ts'
 
-/** Fixed shortcut reference; users cannot remap these keys in Beta. */
-export const SHORTCUTS = [
-  { id: 'strong', label: '加粗', shortcut: '⌘/Ctrl+B' },
-  { id: 'emphasis', label: '斜体', shortcut: '⌘/Ctrl+I' },
-  { id: 'inline-code', label: '行内代码', shortcut: '⌘/Ctrl+`' },
-  { id: 'link', label: '链接', shortcut: '⌘/Ctrl+K' },
-] as const
-
 /** Business face injected into the keyed Settings slot. */
 export interface BetterComposerSettingsCardInjected {
   settings: BetterComposerSettingsStore
@@ -21,7 +13,7 @@ export interface BetterComposerSettingsCardInjected {
 export type BetterComposerSettingsCardProps = InjectFace<BetterComposerSettingsCardInjected>
 
 /**
- * Render the existing preference controls and fixed shortcuts.
+ * Render the Better Composer preference controls.
  * @param props - keyed slot props and the caller-owned Settings store.
  * @returns the Settings card.
  */
@@ -39,7 +31,7 @@ export function BetterComposerSettingsCard({ settings }: BetterComposerSettingsC
   }
 
   return (
-    <li className="dsh-better-composer-settings-card">
+    <div className="dsh-better-composer-settings-card">
       <section aria-label="Better Composer 设置">
         <div className="dsh-better-composer-settings-header">
           <h3>Better Composer 设置</h3>
@@ -79,14 +71,8 @@ export function BetterComposerSettingsCard({ settings }: BetterComposerSettingsC
               onChange={event => { update('pasteClipThreshold', Math.max(0, Math.floor(Number(event.currentTarget.value) || 0))) }} />
           </label>
         </div>
-        <div className="dsh-better-composer-settings-shortcuts" aria-label="快捷键">
-          <strong>快捷键</strong>
-          <ul>
-            {SHORTCUTS.map(shortcut => <li key={shortcut.id}><span>{shortcut.label}</span><kbd>{shortcut.shortcut}</kbd></li>)}
-          </ul>
-        </div>
         {failure ? <p className="dsh-better-composer-settings-failure" role="status">设置保存失败，请重试。</p> : null}
       </section>
-    </li>
+    </div>
   )
 }

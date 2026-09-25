@@ -20,7 +20,7 @@ it('publishes the stable Better Composer identity under the repository license',
   const manifestPath = fileURLToPath(new URL('../../package.json', import.meta.url))
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as PackageManifest
   expect(manifest.name).toBe('@cheesefox/dsh-better-composer')
-  expect(manifest.version).toBe('0.1.0')
+  expect(manifest.version).toBe('1.0.0')
   expect(manifest.license).toBe('MIT')
   expect(manifest.private).toBeUndefined()
 })

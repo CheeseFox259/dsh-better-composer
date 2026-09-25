@@ -1,8 +1,9 @@
-import { parseGfm } from '@deepseek-ai/dsh-client-ui-primitives'
+import { parseGfm } from '../markdown/primitives.ts'
 import type {
   ComposerEditResult, ComposerNativeRange, ComposerTextSegment,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { projectGfm } from '../markdown/ast-ranges.ts'
+import { composerDomBlockRuns } from './dom-mapping.ts'
 
 const MIN_TABLE_COLUMN_WIDTH = 6
 const MAX_TABLE_COLUMN_WIDTH = 48
@@ -169,11 +170,12 @@ export function codeCopyBlockAnchors(
   blocks: readonly MarkdownCodeCopyBlock[],
 ): readonly MarkdownCodeCopyAnchor[] | undefined {
   if (root === null || blocks.length === 0) return []
-  const runs = sourceBlockRuns(root, source, nativeRanges)
+  const runs = composerDomBlockRuns(root, source, nativeRanges)
   if (runs === undefined) return undefined
   return blocks.flatMap(block => {
     const run = runs.find(candidate => candidate.start <= block.start && block.start < candidate.end)
-    return run === undefined ? [] : [{ start: block.start, element: run.element }]
+    return run === undefined || !run.element.classList.contains('dsh-better-composer-code-block')
+      ? [] : [{ start: block.start, element: run.element }]
   })
 }
 
@@ -192,7 +194,7 @@ export function tableRowAnchors(
   layouts: readonly MarkdownTableLayout[],
 ): readonly MarkdownTableRowAnchor[] | undefined {
   if (root === null || layouts.length === 0) return []
-  const runs = sourceBlockRuns(root, source, nativeRanges)
+  const runs = composerDomBlockRuns(root, source, nativeRanges)
   if (runs === undefined) return undefined
   const anchors: MarkdownTableRowAnchor[] = []
   for (const layout of layouts) {
@@ -264,98 +266,6 @@ function isWideCodePoint(codePoint: number): boolean {
     || (codePoint >= 0xff00 && codePoint <= 0xff60)
     || (codePoint >= 0x1f300 && codePoint <= 0x1faff)
   )
-}
-
-interface SourceBlockRun {
-  readonly element: HTMLElement
-  readonly start: number
-  readonly end: number
-}
-
-function sourceBlockRuns(
-  root: HTMLElement,
-  source: string,
-  nativeRanges: readonly ComposerNativeRange[],
-): readonly SourceBlockRun[] | undefined {
-  const blocks = [...root.children].filter((child): child is HTMLElement => child instanceof HTMLElement)
-  if (blocks.length === 0) return undefined
-  const projection = ordinaryProjection(source, nativeRanges)
-  const texts = blocks.map(block => blockText(block))
-  const rendered = texts.join('\n')
-  if (rendered !== projection.text) return undefined
-
-  const runs: SourceBlockRun[] = []
-  let ordinaryStart = 0
-  for (const [index, block] of blocks.entries()) {
-    if (index > 0) ordinaryStart += 1
-    const length = texts[index]!.length
-    const start = sourceOffsetAt(projection, ordinaryStart, 'start')
-    const end = length === 0 ? start : sourceOffsetAt(projection, ordinaryStart + length, 'end')
-    if (start === undefined || end === undefined || start > end) return undefined
-    runs.push({ element: block, start, end })
-    ordinaryStart += length
-  }
-  return ordinaryStart === projection.text.length ? runs : undefined
-}
-
-/** Concatenated visible text of one block; Context Object subtrees are excluded. */
-function blockText(block: HTMLElement): string {
-  let text = ''
-  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT)
-  let current = walker.nextNode()
-  while (current !== null) {
-    const node = current as Text
-    if (node.parentElement?.closest('[contenteditable="false"]') === null) text += node.data
-    current = walker.nextNode()
-  }
-  return text
-}
-
-interface OrdinaryProjection {
-  readonly text: string
-  readonly before: readonly number[]
-  readonly after: readonly number[]
-}
-
-function ordinaryProjection(source: string, nativeRanges: readonly ComposerNativeRange[]): OrdinaryProjection {
-  const before: number[] = []
-  const after: number[] = []
-  let text = ''
-  let cursor = 0
-  const append = (start: number, end: number): void => {
-    let index = start
-    while (index < end) {
-      const current = source[index]
-      if (current === '\r' && source[index + 1] === '\n' && index + 1 < end) {
-        text += '\n'; before.push(index); after.push(index + 2); index += 2
-      } else if (current === '\r') {
-        text += '\n'; before.push(index); after.push(index + 1); index += 1
-      } else {
-        text += current ?? ''; before.push(index); after.push(index + 1); index += 1
-      }
-    }
-  }
-  for (const range of [...nativeRanges].sort((left, right) => left.start - right.start || left.end - right.end)) {
-    if (range.start < 0 || range.end <= range.start || range.end > source.length) continue
-    if (range.start > cursor) append(cursor, range.start)
-    cursor = Math.max(cursor, range.end)
-  }
-  append(cursor, source.length)
-  return { text, before, after }
-}
-
-function sourceOffsetAt(
-  projection: OrdinaryProjection,
-  ordinaryIndex: number,
-  bias: 'start' | 'end',
-): number | undefined {
-  if (ordinaryIndex < 0 || ordinaryIndex > projection.text.length) return undefined
-  if (bias === 'start') {
-    if (ordinaryIndex === projection.text.length) return projection.after.at(-1)
-    return projection.before[ordinaryIndex]
-  }
-  if (ordinaryIndex === 0) return 0
-  return projection.after[ordinaryIndex - 1]
 }
 
 function crossesNative(start: number, end: number, ranges: readonly ComposerNativeRange[]): boolean {

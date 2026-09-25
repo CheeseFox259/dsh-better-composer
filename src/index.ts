@@ -9,7 +9,7 @@ export { SETTINGS_NAMESPACE }
 
 const SETTINGS_NS = SETTINGS_NAMESPACE
 
-/** Schema for the four exposed Better Composer preferences and the legacy toolbar field. */
+/** Schema for the Better Composer preferences and the legacy toolbar field. */
 export const Config: z<BetterComposerSettings> = z.object({
   enabled: z.boolean().default(DEFAULT_SETTINGS.enabled),
   markdownVisual: z.boolean().default(DEFAULT_SETTINGS.markdownVisual),
@@ -30,10 +30,5 @@ export const SettingsSchema = Config
  */
 export function apply(ctx: Context, config: BetterComposerSettings = { ...DEFAULT_SETTINGS }): void {
   new BetterComposerRemoteService(ctx)
-  ctx.inject(['settings'], (settingsCtx) => {
-    ;(settingsCtx.settings as unknown as { installSection(owner: unknown, ns: string, schema: unknown, entry: unknown, hooks: unknown): void }).installSection(ctx, SETTINGS_NS, Config, config, {
-      setSource: () => {},
-      onChange: () => {},
-    })
-  })
+  void config
 }

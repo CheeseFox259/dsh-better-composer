@@ -1,5 +1,5 @@
 import type { ComposerDecorationRange } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { parseGfm } from '@deepseek-ai/dsh-client-ui-primitives'
+import { parseGfm } from './primitives.ts'
 import { projectGfm } from './ast-ranges.ts'
 import { MAX_OPTIONAL_SCAN_LENGTH } from './limits.ts'
 

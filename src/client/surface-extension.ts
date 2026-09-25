@@ -103,13 +103,20 @@ export function createMarkdownSurfaceExtension(settings: BetterComposerSettingsS
       }
       if (request.presentation.popup !== undefined) {
         const popup = request.presentation.popup
+        if (request.key === 'escape') {
+          dismissedKey = id
+          return 'consumed'
+        }
         if (request.key === 'up' || request.key === 'down') {
           const direction = request.key === 'down' ? 1 : -1
           selectedIndex = (popup.selectedIndex + direction + popup.candidates.length) % popup.candidates.length
           selectedKey = id
           return 'consumed'
         }
-        if ((request.key !== 'tab' && request.key !== 'enter') || (request.key === 'tab' && request.shift)) return 'pass'
+        // Enter remains the host composer action (submit/newline). Tab is the
+        // explicit completion acceptance key; never move the caret merely
+        // because a passive popup happens to be visible.
+        if (request.key !== 'tab' || request.shift) return 'pass'
         const candidate = popup.candidates[popup.selectedIndex]
         if (candidate === undefined) return 'pass'
         const result = acceptMarkdownCompletion({

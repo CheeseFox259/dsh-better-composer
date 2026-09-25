@@ -28,7 +28,18 @@ describe('context window summary', () => {
     expect(summary.assistantOutputTokens).toBe(60)
     expect(summary.estimatedMessageTokens).toBe(150)
     expect(summary.turns).toHaveLength(1)
-    expect(summary.turns[0]).toEqual({ index: 1, userTokens: 100, assistantTokens: 60, toolCalls: 1, fileRefs: 1, imageCount: 0 })
+    expect(summary.turns[0]).toEqual({ index: 1, userTokens: 100, assistantTokens: 60, toolCalls: 1, toolTokens: 0, toolChars: 0, fileRefs: 1, imageCount: 0 })
+  })
+
+  it('accumulates tool result payload into the owning turn', () => {
+    const summary = summarizeContextWindow([
+      event('user/message', { turn: 1, content: [{ type: 'text', text: 'q'.repeat(40) }] }),
+      event('tool/result', { turn: 1, step: 1, content: [{ type: 'text', text: 'r'.repeat(200) }] }),
+    ], 1)
+
+    expect(summary.toolResults).toBe(1)
+    expect(summary.turns[0]?.toolChars).toBe(200)
+    expect(summary.turns[0]?.toolTokens).toBe(50)
   })
 
   it('starts a new turn per user message and keeps the last twenty', () => {
@@ -112,6 +123,35 @@ describe('context browser model', () => {
 })
 
 describe('context browser data integrity', () => {
+  it('assigns identical turn indexes and per-turn tokens in the summary and the browser', async () => {
+    const { buildContextBrowser, summarizeContextWindow } = await import('../../src/client/context-map.ts')
+    const entries = [
+      event('turn/start', { turn: 1 }),
+      event('user/message', { turn: 1, step: 1, content: [{ type: 'text', text: 'u'.repeat(40) }] }),
+      event('assistant/message', { turn: 1, step: 1, content: [{ type: 'text', text: 'a'.repeat(80) }], usage: { outputTokens: 30 } }),
+      event('tool/result', { turn: 1, step: 1, content: [{ type: 'text', text: 'r'.repeat(200) }] }),
+      // No explicit turn fields: the user message must open turn 2 and the
+      // assistant answer must join it, in BOTH folds.
+      event('user/message', { content: [{ type: 'text', text: 'v'.repeat(20) }] }),
+      event('assistant/message', { content: [{ type: 'text', text: 'b'.repeat(60) }] }),
+    ]
+
+    const summary = summarizeContextWindow(entries, 1)
+    const browser = buildContextBrowser(entries)
+
+    expect(summary.turns.map(turn => turn.index)).toEqual(browser.turns.map(turn => turn.index))
+    for (const turn of browser.turns) {
+      const stat = summary.turns.find(candidate => candidate.index === turn.index)
+      expect(stat).toBeDefined()
+      expect(stat!.userTokens).toBe(Math.ceil(turn.userChars / 4))
+      expect(stat!.assistantTokens).toBe(turn.assistantTokens)
+      expect(stat!.toolChars).toBe(turn.toolChars)
+      expect(stat!.toolTokens).toBe(Math.ceil(turn.toolChars / 4))
+    }
+    expect(summary.turns[0]?.toolChars).toBe(200)
+    expect(browser.turns[0]?.steps[0]?.messages.map(message => message.role)).toEqual(['user', 'assistant', 'tool'])
+  })
+
   it('reads assistant usage at the event-data top level (regression: nested message)', async () => {
     const { buildContextBrowser, summarizeContextWindow } = await import('../../src/client/context-map.ts')
     const entries = [
@@ -124,7 +164,9 @@ describe('context browser data integrity', () => {
 
     const browser = buildContextBrowser(entries)
     expect(browser.turns[0]?.outputTokens).toBe(128)
+    expect(browser.turns[0]?.assistantTokens).toBe(128)
     expect(browser.turns[0]?.steps[0]?.messages[0]?.outputTokens).toBe(128)
+    expect(browser.turns[0]?.steps[0]?.messages[0]?.chars).toBe(6)
 
     const summary = summarizeContextWindow(entries, 1)
     expect(summary.assistantOutputTokens).toBe(128)

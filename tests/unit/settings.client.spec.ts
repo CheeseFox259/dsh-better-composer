@@ -25,7 +25,7 @@ describe('Better Composer settings', () => {
   })
 
   it('keeps invalid persisted values at their safe defaults', () => {
-    expect(normalizeSettings({ enabled: 'false', markdownVisual: 0, diagnostics: null, toolbarMode: 'wide' })).toEqual(DEFAULT_SETTINGS)
+    expect(normalizeSettings({ enabled: 'false', markdownVisual: 0, diagnostics: null, toolbarMode: 'wide', pasteFileExtension: '.exe' })).toEqual(DEFAULT_SETTINGS)
   })
 
   it('tracks the scope, writes fields, and stops after disposal', async () => {
@@ -50,10 +50,13 @@ describe('Better Composer settings', () => {
     await store.set('markdownVisual', false)
     expect(store.get()).toMatchObject({ markdownVisual: false })
     expect(updates).toBe(2)
+    await store.set('pasteClipThreshold', 1000)
+    expect(store.get()).toMatchObject({ pasteClipThreshold: 1000 })
+    expect(updates).toBe(3)
     off()
     store.dispose()
     await set('diagnostics', true)
-    expect(updates).toBe(2)
+    expect(updates).toBe(3)
   })
 
   it('keeps the last accepted snapshot when a Settings write fails', async () => {

@@ -1,4 +1,4 @@
-import { grammarLoadCount, parseGfm } from '@deepseek-ai/dsh-client-ui-primitives'
+import { grammarLoadCount, parseGfm } from './primitives.ts'
 import type {
   ComposerDecorationContext, ComposerDecorationProvider, ComposerDecorationRange,
   ComposerNativeRange, ComposerTextSegment,
@@ -46,13 +46,14 @@ export function createMarkdownProvider(
             : [])
           const segmentRanges = [...projection.semanticRanges, ...projection.markerRanges, ...projection.fenceRanges, ...projection.structuralRanges].flatMap(range => {
             if (range.target === 'block') {
-              // Reveal policy for content-faking block decorations: while the
-              // caret is inside a list item or thematic break, the raw source
-              // line must show without the synthetic bullet/checkbox/rule that
-              // the block class paints (mirrors the marker-level reveal).
+              // Keep list and task glyphs while editing their source; reveal
+              // a thematic break's raw line instead of its synthetic rule.
               if (isContentBlockClass(range.className)) {
                 const owner = innermostContentConstruct(projection.constructs, range)
-                if (owner !== undefined && active.has(owner)) return []
+                const keepListGlyph = range.className === 'dsh-better-composer-bullet'
+                  || range.className === 'dsh-better-composer-ordered'
+                  || range.className === 'dsh-better-composer-task'
+                if (owner !== undefined && active.has(owner) && !keepListGlyph) return []
               }
               const base = offsetRange(range, segment.start)
               if (range.className === 'dsh-better-composer-table-separator') {
@@ -70,7 +71,8 @@ export function createMarkdownProvider(
             // every complete construct should be hidden.
             if (!hasPresentation) return [offsetRange(range, segment.start)]
             const owner = projection.constructs.find(record =>
-              record.complete && record.markers.some(marker => marker.start === range.start && marker.end === range.end))
+              record.markers.some(marker => marker.start === range.start && marker.end === range.end)
+                && (record.complete || record.kind === 'list' || record.kind === 'task'))
             const recordActive = owner !== undefined && active.has(owner)
             if (range.className === 'dsh-better-composer-fence-marker' && owner !== undefined && !composing) {
               if (sourceRangeIsActive(range, selection)) return [offsetRange({ ...range, className: `${range.className}-active` }, segment.start)]
@@ -84,8 +86,14 @@ export function createMarkdownProvider(
               const suffix = sourceRangeIsActive(range, selection) ? 'active' : 'hidden'
               return [offsetRange({ ...range, className: `${range.className}-${suffix}` }, segment.start)]
             }
+            if (isListMarkerClass(range.className) && (recordActive || emptyListItemFollowsList(masked, range.start, range.end))) {
+              return [offsetRange({ ...range, className: `${range.className}-hidden` }, segment.start)]
+            }
             if (recordActive || owner === undefined) {
               return [offsetRange({ ...range, className: `${range.className}-active` }, segment.start)]
+            }
+            if (owner !== undefined && !owner.complete && (owner.kind === 'list' || owner.kind === 'task') && isListMarkerClass(range.className)) {
+              return [offsetRange({ ...range, className: `${range.className}-hidden` }, segment.start)]
             }
             if (range.className === 'dsh-better-composer-fence-language') {
               return [offsetRange({ ...range, className: `${range.className}-visible` }, segment.start)]
@@ -229,6 +237,21 @@ function selectionInSegment(
   const start = Math.max(0, Math.min(segment.text.length, presentation.selectionStart - segment.start))
   const end = Math.max(start, Math.min(segment.text.length, presentation.selectionEnd - segment.start))
   return { start, end }
+}
+
+function isListMarkerClass(className: string): boolean {
+  return /^dsh-better-composer-(?:list|ordered)-marker-depth-\d+$/u.test(className)
+}
+
+function emptyListItemFollowsList(source: string, start: number, end: number): boolean {
+  const lineStart = source.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+  const lineEnd = source.indexOf('\n', end)
+  const current = source.slice(lineStart, lineEnd < 0 ? source.length : lineEnd)
+  if (current.slice(0, end - lineStart).trim() !== current.trim() || current.replace(/^(?:[ \t]*)(?:[-+*]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?/u, '').trim() !== '') return false
+  if (lineStart === 0) return false
+  const previousEnd = lineStart - 1
+  const previousStart = source.lastIndexOf('\n', Math.max(0, previousEnd - 1)) + 1
+  return /^(?:[ \t]*)(?:[-+*]|\d+[.)])[ \t]+\S/u.test(source.slice(previousStart, previousEnd))
 }
 
 function isSourceMarker(className: string): boolean {
