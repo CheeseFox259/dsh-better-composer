@@ -94,16 +94,9 @@ export function markdownCompletion(input: MarkdownCompletionInput): MarkdownComp
   const taskPopup = taskMarkerPopup(linePrefix, lineSourceStart, lineCaret, revision)
   if (taskPopup !== undefined) return taskPopup
 
-  if (/^[ \t]{0,3}#{1,6}$/u.test(linePrefix)) {
-    return {
-      revision,
-      kind: 'popup',
-      from: input.selection.start,
-      to: input.selection.end,
-      candidates: [{ label: '标题空格', insertText: ' ' }],
-    }
-  }
-
+  // A heading marker is already valid Markdown without a trailing space. Do
+  // not render a passive spacing suggestion here: it used to appear as a
+  // floating completion box and could interfere with the host Enter action.
   const ghost = sectionGhost(linePrefix, input.selection.start, revision)
   return ghost === undefined || nativeRangeIntersects(input, ghost.from, ghost.to) ? undefined : ghost
 }

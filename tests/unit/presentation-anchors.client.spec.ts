@@ -39,6 +39,8 @@ describe('presentation anchors over the source DOM', () => {
     const root = buildRoot(draft)
     const blocks = codeCopyBlocksForSegments([{ start: 0, text: draft }])
 
+    expect(codeCopyBlockAnchors(root, draft, [], blocks)).toEqual([])
+    root.children[0]!.classList.add('dsh-better-composer-code-block')
     const anchors = codeCopyBlockAnchors(root, draft, [], blocks)
 
     expect(anchors).toHaveLength(1)

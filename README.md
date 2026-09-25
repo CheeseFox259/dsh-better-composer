@@ -8,7 +8,7 @@ kind: "package-bundle"
 English | [中文](README.zh.md)
 
 [![CI](https://github.com/CheeseFox259/dsh-better-composer/actions/workflows/ci.yml/badge.svg)](https://github.com/CheeseFox259/dsh-better-composer/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@noleftbutright/dsh-better-composer)](https://www.npmjs.com/package/@noleftbutright/dsh-better-composer)
+[![npm](https://img.shields.io/npm/v/@cheesefox/dsh-better-composer)](https://www.npmjs.com/package/@cheesefox/dsh-better-composer)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Summary
@@ -31,28 +31,62 @@ DSH Better Composer adds source-preserving Markdown presentation, fixed local co
 <a id="use-this-package"></a>
 ## Use this package
 
-### Install into a profile
+### Requirements
 
-Install the published package from npm:
+- A native DSH installation with the `web` profile available.
+- DSH `0.1.7-alpha.2` or a newer release that satisfies the peer dependencies in this package. The release tested against the source tree is `@deepseek-ai/dsh@0.1.7-alpha.2`.
+- Node.js `>=20` and pnpm `>=10`.
+- A workspace directory that DSH can open. File-mode pasted clips need a known workspace path.
+
+Check the native installation before adding the plugin:
 
 ```sh
-pnpm dsh plugin --profile web add @noleftbutright/dsh-better-composer
+dsh --version
+dsh web --no-open
 ```
 
-Or install from source:
+Stop the temporary web process after confirming the page opens, then install the plugin into the profile you use to run Web DSH.
+
+### Install the published package
+
+```sh
+pnpm dsh plugin --profile web add @cheesefox/dsh-better-composer@1.0.0
+pnpm dsh web --no-open
+```
+
+Open the Web URL printed by DSH. Go to **Settings → Built-in plugins → Better Composer** to verify the plugin contribution is loaded. Create a new session and confirm the Composer overlay and the `+` menu are present.
+
+### Install directly from GitHub source
 
 ```sh
 git clone https://github.com/CheeseFox259/dsh-better-composer.git
+cd dsh-better-composer
+pnpm install
+pnpm run bundle
+cd ..
 pnpm dsh plugin --profile web add ./dsh-better-composer
+pnpm dsh web --no-open
 ```
 
-Remove it with:
+The source install is useful for development and always uses the current checkout. It does not modify DSH Core; the package is a profile bundle patch plus Host/Client plugin entries.
+
+### Verify the first installation
+
+1. Open a new session in the Web UI.
+2. Paste text longer than the configured threshold and confirm it becomes a `粘贴文本` chip.
+3. Open the chip and select **文件送达**. Choose a text or code extension in the **文件类型** selector, then save an edit and confirm the file is written under `.dsh/pastes/` when the message is sent.
+4. In the clip editor, test **撤销** and **重做** after manual edits and after applying an LLM rewrite preview.
+5. Open **Settings → Built-in plugins → Better Composer** and adjust the long-paste threshold. The file extension is selected per clip, not in global Settings.
+
+### Remove the plugin
 
 ```sh
-pnpm dsh plugin --profile web remove @noleftbutright/dsh-better-composer
+pnpm dsh plugin --profile web remove @cheesefox/dsh-better-composer
 ```
 
-The package is a `dsh.bundle.patch` profile layer. The patch inserts one `dsh-better-composer` row into the active profile. The client entry is loaded only on the Web platform and depends on the public conversation, renderer, Settings, and Settings-plugin packages declared in `package.json`.
+Restart Web DSH after changing profile composition. Removing the plugin removes its overlay, Settings card, clip source, sidebar tab, and Remote contribution; it does not modify existing DSH session history or Core source.
+
+The package is a `dsh.bundle.patch` profile layer. The patch inserts one `dsh-better-composer` row into the active profile. The client entry is loaded only on the Web platform and depends on the public conversation, renderer, Settings, and Settings-plugin packages declared in `package.json`. The package's peer lower bound is `0.1.7-alpha.1`; the release verification uses native DSH `0.1.7-alpha.2`.
 
 ### What you get
 
@@ -65,11 +99,11 @@ The package is a `dsh.bundle.patch` profile layer. The patch inserts one `dsh-be
 
 - Context management: run `/compact` in-place (with confirmation and a compacting state; compaction checkpoints are marked on turns); fork a new session after any closed turn; pin turns as anchors shown as gold ticks on the growth chart.
 - Cache visualization: hit rate, current-context cache coverage, and read/write tokens (provider prefix caching, automatic).
-- Long-paste conversion into an editable "pasted text" chip (threshold adjustable in Settings; 0 disables): delivery is selectable per chip — inline into the prompt at submit time, or materialized as a workspace file the agent reads on demand. Clicking the chip opens a right-sidebar editor supporting manual edits and instruction-driven LLM rewriting (a one-shot call outside the session event stream, optionally carrying recent session messages as reference).
+- Long-paste conversion into an editable "pasted text" chip (threshold adjustable in Settings; 0 disables): delivery is selectable per chip — inline into the prompt at submit time, or materialized as a workspace file and referenced with the official `@path` file-reference syntax. The workspace file extension is selectable in the clip editor from a fixed text/code list. Clicking the chip opens a right-sidebar editor supporting manual edits and instruction-driven LLM rewriting with cancellation, preview, apply, undo, redo, and retry (a one-shot call outside the session event stream, optionally carrying recent session messages and the current reasoning effort as reference).
 
   ![A long paste collapses into an editable chip](https://raw.githubusercontent.com/CheeseFox259/dsh-better-composer/main/docs/screenshots/paste-clip.png)
 
-- Four Settings controls: enable Better Composer, Markdown visual enhancement, Markdown syntax hints, and the long-paste threshold. The legacy `toolbarMode` field remains schema-compatible and is not a separate UI toggle.
+- Four Settings controls: enable Better Composer, Markdown visual enhancement, Markdown syntax hints, and the long-paste threshold. The per-clip workspace file extension is selected in the clip editor. The legacy `toolbarMode` field remains schema-compatible and is not a separate UI toggle.
 
 -----
 
@@ -83,7 +117,7 @@ The Host entry in [`src/index.ts`](src/index.ts) installs the Settings schema, t
 
 The Markdown provider parses the authoritative Composer snapshot and emits UTF-16 source ranges. The editor surface presents those ranges through Core's generic decoration and surface-extension seams. Completion acceptance and language changes use the existing Core transaction path. Ghost text, diagnostics, tables, and code controls are presentation only; they never create a second source, selection, history, Context Object, or submission path.
 
-Paste clips (`@clip:<id>`) work by detecting a single-revision length jump via prefix/suffix diff, replacing the inserted span with a chip through the public `setDraft(text, references)` verb, and expanding the chip at submit time through a registered `inputTriggers` codec — either the full text (inline) or a workspace-file handle (file mode, where the Host writes the text under `<cwd>/.dsh/pastes/`). Clip payloads persist under the harness home so reloads never lose them. The right-sidebar editor registers through `sidebarRightTabs` + `sidebar.right.pane.tab`; its LLM rewrite calls the Host `editText` Remote method with an independent purpose and appends nothing to the session event log.
+Paste clips (`@clip:<id>`) work by detecting a single-revision length jump via prefix/suffix diff, replacing the inserted span with a chip through the public `setDraft(text, references)` verb, and expanding the chip at submit time through a registered `inputTriggers` codec — either the full text (inline) or a workspace file reference such as `@.dsh/pastes/pasted-text-<id>.md` (file mode, where the Host writes the text under `<cwd>/.dsh/pastes/`). Clip payloads persist under the harness home so reloads never lose them. The right-sidebar editor registers through `sidebarRightTabs` + `sidebar.right.pane.tab`; its LLM rewrite calls the Host `editText` Remote method with an independent purpose, current model reasoning effort, cancellation, and preview/apply state, and appends nothing to the session event log.
 
 </details>
 
@@ -103,12 +137,12 @@ Paste clips (`@clip:<id>`) work by detecting a single-revision length jump via p
 <a id="model-experience"></a>
 ## Model Experience
 
-A file-mode clip reaches the model only as a file handle (name, byte count, saved path, and a hint to read it with file tools); an inline clip splices its full text into the user message. The LLM rewrite runs outside the session: the model sees only the clip text, the instruction, and the optional recent-message excerpt the plugin passes explicitly — never the session event stream.
+A file-mode clip reaches the model as an official-style workspace file reference (`@.dsh/pastes/...`); the file is available to the Agent's normal file tools, while an inline clip splices its full text into the user message. The LLM rewrite runs outside the session: the model sees only the clip text, the instruction, the optional recent-message excerpt, and the current reasoning effort passed explicitly by the plugin — never the session event stream. Results are previewed before they replace the clip.
 
 <a id="known-limitations-and-deferred-work"></a>
 ## Known Limitations and Deferred Work
 
-The host must provide the declared public composer, Settings, input-trigger, right-Sidebar, and Remote seams; an older host missing one disables only that capability. The supported code-language list is finite and local. File-mode delivery requires a known session workspace path; clips created before cwd capture fail file-mode sends with an explicit error rather than silently. Paste detection cannot distinguish a paste from any other large single-step insertion (IME commits, undo); the threshold limits but does not eliminate false positives. Browser acceptance belongs to the host release process; this repository's automated checks do not replace a maintainer's real-browser review.
+The host must provide the declared public composer, Settings, input-trigger, right-Sidebar, and Remote seams; an older host missing one disables only that capability. The supported code-language and pasted-file-extension lists are finite and local. File-mode delivery requires a known session workspace path; clips created before cwd capture fail file-mode sends with an explicit error rather than silently. Pure plugin code cannot create Core's opaque attachment receipts, so file-mode clips use the official workspace `@path` reference convention rather than pretending to be native binary attachments. Paste detection cannot distinguish a paste from any other large single-step insertion (IME commits, undo); the threshold limits but does not eliminate false positives. Browser acceptance belongs to the host release process; this repository's automated checks do not replace a maintainer's real-browser review.
 
 <a id="dev-note"></a>
 ### Dev Note

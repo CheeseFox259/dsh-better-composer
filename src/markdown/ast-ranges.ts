@@ -1,6 +1,6 @@
 import type { Root } from 'mdast'
 import type { ComposerDecorationRange } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { highlightLines } from '@deepseek-ai/dsh-client-ui-primitives'
+import { highlightLines } from './primitives.ts'
 
 interface MarkdownNode {
   readonly type: string
@@ -140,12 +140,24 @@ export function projectGfm(
   const fences = markers.filter(range => range.className === 'dsh-better-composer-fence-marker' || range.className === 'dsh-better-composer-fence-language')
   const complete = constructs
   const fallback = boundedLexicalFallback(source, complete, htmlRanges)
+  const listFallback = boundedListFallback(source, complete, htmlRanges)
+  for (const record of listFallback) {
+    const marker = record.markers[0]
+    if (marker !== undefined) {
+      markers.push({ ...marker, className: listMarkerClass(source, { start: record.sourceStart }, source.slice(record.sourceStart, marker.end)), layer: 'syntax', priority: 10 })
+    }
+    const ordered = /^\s*\d+[.)][ \t]+/u.test(source.slice(record.sourceStart, record.sourceEnd))
+    const className = record.kind === 'task' ? 'dsh-better-composer-task' : ordered ? 'dsh-better-composer-ordered' : 'dsh-better-composer-bullet'
+    addBlockRange(structuralRanges, { start: record.sourceStart, end: record.sourceEnd }, className)
+    addBlockRange(structuralRanges, { start: record.sourceStart, end: record.sourceEnd }, listDepthClass(source, { start: record.sourceStart }))
+    if (record.kind === 'task') addBlockRange(structuralRanges, { start: record.sourceStart, end: record.sourceEnd }, 'dsh-better-composer-task')
+  }
   return {
     semanticRanges: ranges,
     markerRanges: markers.filter(range => range.className !== 'dsh-better-composer-fence-marker' && range.className !== 'dsh-better-composer-fence-language'),
     fenceRanges: [...fences, ...tokens],
     structuralRanges,
-    constructs: [...complete, ...fallback],
+    constructs: [...complete, ...fallback, ...listFallback],
     htmlRanges,
   }
 }
@@ -317,6 +329,44 @@ export function boundedLexicalFallback(
   const link = /\[[^\]\n]*\]\([^\)\n]*$/gu.exec(source)
   if (link !== null && !inFence(link.index)) {
     out.push({ kind: 'link', sourceStart: link.index, sourceEnd: source.length, semanticStart: link.index + 1, semanticEnd: Math.max(link.index + 1, source.length), markers: [{ start: link.index, end: Math.min(source.length, link.index + 1) }], depth: 0, complete: false })
+  }
+  return out
+}
+
+/** Add conservative line-local list records while the full AST is incomplete. */
+function boundedListFallback(
+  source: string,
+  complete: readonly MarkdownConstructRecord[],
+  barriers: readonly { readonly start: number; readonly end: number }[],
+): readonly MarkdownConstructRecord[] {
+  const out: MarkdownConstructRecord[] = []
+  const fenced = complete.filter(record => record.kind === 'fence').map(record => ({ start: record.sourceStart, end: record.sourceEnd }))
+  const blocked = (at: number): boolean => fenced.some(range => range.start <= at && at < range.end)
+    || barriers.some(range => range.start <= at && at < range.end)
+  const covered = (start: number): boolean => complete.some(record =>
+    (record.kind === 'list' || record.kind === 'task') && record.sourceStart <= start && start < record.sourceEnd)
+  let lineStart = 0
+  while (lineStart <= source.length) {
+    const newline = source.indexOf('\n', lineStart)
+    const rawEnd = newline < 0 ? source.length : newline
+    const line = source.slice(lineStart, rawEnd).replace(/\r$/u, '')
+    const match = /^( {0,})([-+*]|\d+[.)])([ \t]+)(?:\[([ xX])\][ \t]+)?/u.exec(line)
+    if (match !== null && !blocked(lineStart) && !covered(lineStart)) {
+      const markerEnd = lineStart + match[0].length
+      const task = match[4] !== undefined
+      out.push({
+        kind: task ? 'task' : 'list',
+        sourceStart: lineStart,
+        sourceEnd: lineStart + line.length,
+        semanticStart: markerEnd,
+        semanticEnd: lineStart + line.length,
+        markers: [{ start: lineStart, end: markerEnd }],
+        depth: Math.min(6, Math.floor((match[1]?.length ?? 0) / 2) + 1),
+        complete: false,
+      })
+    }
+    if (newline < 0) break
+    lineStart = newline + 1
   }
   return out
 }

@@ -250,6 +250,22 @@ describe('Markdown projection', () => {
     ])
   })
 
+  it('keeps a freshly continued list marker hidden while its AST is incomplete', () => {
+    const draft = '- first\n- '
+    const ranges = createMarkdownProvider().decorate({
+      sessionId: 'fresh-list' as never,
+      draft,
+      draftRev: 19,
+      nativeRanges: [],
+      presentation: { focused: false, selectionStart: -1, selectionEnd: -1, activeLineStart: -1, activeLineEnd: -1 },
+    })
+
+    expect(ranges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ className: 'dsh-better-composer-list-marker-depth-1-hidden', start: 8, end: 10 }),
+      expect.objectContaining({ target: 'block', className: 'dsh-better-composer-bullet' }),
+    ]))
+  })
+
   it('marks an inactive table separator separately from ordinary table punctuation', () => {
     const draft = '| Name | Value |\n| --- | --- |\n| A | 1 |'
     const ranges = createMarkdownProvider().decorate({

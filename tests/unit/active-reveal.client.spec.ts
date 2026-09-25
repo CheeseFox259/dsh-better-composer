@@ -23,11 +23,11 @@ function blockClasses(ranges: readonly { readonly target?: string; readonly clas
 }
 
 describe('active construct block reveal', () => {
-  it('drops the synthetic bullet of a transient nested empty item while typing `1. *`', () => {
+  it('keeps the list glyph of a transient nested empty item while typing `1. *`', () => {
     const draft = '1. *'
     const ranges = decorate(draft, draft.length)
 
-    expect(blockClasses(ranges)).not.toContain('dsh-better-composer-bullet')
+    expect(blockClasses(ranges)).toContain('dsh-better-composer-bullet')
     expect(blockClasses(ranges)).toContain('dsh-better-composer-ordered')
   })
 
@@ -58,10 +58,10 @@ describe('active construct block reveal', () => {
     ]))
   })
 
-  it('drops the task checkbox glyph while editing the item source', () => {
+  it('keeps the task checkbox glyph while editing the item source', () => {
     const draft = '- [ ] todo'
     const ranges = decorate(draft, draft.length)
 
-    expect(blockClasses(ranges)).not.toContain('dsh-better-composer-task')
+    expect(blockClasses(ranges)).toContain('dsh-better-composer-task')
   })
 })

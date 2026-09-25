@@ -1,23 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { SHORTCUTS } from '../../src/client/settings-card.tsx'
 import { BetterComposerSettingsCard } from '../../src/client/settings-card.tsx'
 import { createEditorContribution } from '../../src/client/editor.tsx'
 import { DEFAULT_SETTINGS } from '../../src/settings.ts'
 
 describe('Better Composer Settings card', () => {
-  it('exposes the M6 preferences and read-only shortcuts', () => {
+  it('exposes the M6 preferences without plugin-owned formatting shortcuts', () => {
     const settingsHtml = renderToStaticMarkup(createElement(BetterComposerSettingsCard as never, {
       settings: store({ ...DEFAULT_SETTINGS }),
     } as never))
     expect(settingsHtml.match(/type="checkbox"/gu)).toHaveLength(3)
-    expect(SHORTCUTS).toEqual([
-      { id: 'strong', label: '加粗', shortcut: '⌘/Ctrl+B' },
-      { id: 'emphasis', label: '斜体', shortcut: '⌘/Ctrl+I' },
-      { id: 'inline-code', label: '行内代码', shortcut: '⌘/Ctrl+`' },
-      { id: 'link', label: '链接', shortcut: '⌘/Ctrl+K' },
-    ])
+    expect(settingsHtml).not.toContain('快捷键')
   })
 
   it('renders existing settings copy and keeps the editor toolbar-free', () => {
@@ -34,13 +28,13 @@ describe('Better Composer Settings card', () => {
     expect(settingsHtml).toContain('不会修改实际发送给 Agent 的文本。')
     expect(settingsHtml).toContain('检查高置信度 Markdown 问题，不阻止发送。')
 
-    const Editor = createEditorContribution(store({ ...DEFAULT_SETTINGS }))
+    const Editor = createEditorContribution({} as never, store({ ...DEFAULT_SETTINGS }), {} as never)
     const editorHtml = renderToStaticMarkup(createElement(Editor as never, {
-      useInput: (selector: (state: { draft: string }) => unknown) => selector({ draft: '# Task' }),
+      sessionId: 's1',
+      useInput: (selector: (state: unknown) => unknown) => selector({
+        draft: '# Task', draftRev: 1, occurrences: [], phase: 'plain', attachmentIds: [], queue: [],
+      }),
       inputActions: {},
-      runAction: () => {},
-      expanded: false,
-      setExpanded: () => {},
     } as never))
     expect(editorHtml).not.toContain('role="toolbar"')
     expect(editorHtml).not.toContain('<button')

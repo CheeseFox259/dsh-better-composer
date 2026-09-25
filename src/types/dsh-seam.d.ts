@@ -13,6 +13,33 @@ declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
   /** Branded session identity used across DSH session APIs. */
   export type ComposerSessionId = string & { readonly __dshSessionId: unique symbol }
 
+  export interface InputState {
+    readonly draft: string
+    readonly draftRev: number
+    readonly phase: string
+    readonly occurrences: readonly { readonly offset: number; readonly length: number; readonly source: string }[]
+  }
+
+  export interface TokenSpan {
+    readonly start: number
+    readonly end: number
+    readonly draftRev: number
+  }
+
+  export interface InputActions {
+    captureInsertion(): TokenSpan
+    insertText(text: string, span: TokenSpan): boolean
+    setDraft(text: string): void
+  }
+
+  export interface ReferenceInsert {
+    readonly source: string
+    readonly ref: string
+    readonly label: string
+    readonly appearance?: 'session' | 'file' | 'folder'
+    readonly clipboardText: string
+  }
+
   export interface ComposerPresentationState {
     readonly focused: boolean
     readonly composing?: boolean
@@ -41,6 +68,16 @@ declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
     readonly nativeRanges: readonly ComposerNativeRange[]
     readonly textSegments?: readonly ComposerTextSegment[]
     readonly presentation?: ComposerPresentationState
+  }
+
+  export type ComposerDecorationLayer = 'syntax' | 'diagnostic'
+  export type ComposerDecorationTarget = 'text' | 'block'
+
+  export interface ComposerDecorationSegment {
+    readonly start: number
+    readonly end: number
+    readonly className: string
+    readonly blockClassName?: string
   }
 
   export interface ComposerDecorationRange {
@@ -189,6 +226,14 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
 }
 
 declare module '@deepseek-ai/dsh-client-ui-settings/client' {
+  /** Accepted values and serialized writes shared by editors of one Host entry. */
+  export interface ConfigForm<T> {
+    getSnapshot(): { readonly value: unknown }
+    subscribe(listener: () => void): () => void
+    set(field: string, value: unknown): Promise<boolean>
+    unset(field: string): Promise<boolean>
+  }
+
   /** Settings scope bound to one namespace. */
   export interface SettingsScope<T> {
     getSnapshot(): { readonly value: unknown }
@@ -200,6 +245,10 @@ declare module '@deepseek-ai/dsh-client-ui-settings/client' {
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
+    /** Shared configuration forms service. */
+    configForms: {
+      get<T = unknown>(entryId: string): import('@deepseek-ai/dsh-client-ui-settings/client').ConfigForm<T>
+    }
     /** Slot registry seat (declared by the renderer host at runtime). */
     slots: {
       register(options: unknown, component: unknown): () => void

@@ -10,18 +10,43 @@ export function clipMention(id: string): string {
   return `@clip:${id}`
 }
 
+/** Provider that returns the mounted remote face synchronously or asynchronously. */
+export type RemoteProvider = () => BetterComposerRemoteFace | undefined | Promise<BetterComposerRemoteFace | undefined>
+
 /** Serialize one file-mode clip: materialize it as a workspace file and hand the model the path. */
 async function serializeAsFile(
   entry: ClipEntry,
-  remote: () => BetterComposerRemoteFace | undefined,
+  remote: RemoteProvider,
+  resolveCwd?: () => string,
 ): Promise<string> {
-  if (entry.cwd === '') throw new Error('file-mode delivery needs the session workspace path, which is unknown')
-  const face = remote()
+  const cwd = entry.cwd !== '' ? entry.cwd : (resolveCwd?.() ?? '')
+  if (cwd === '') throw new Error('file-mode delivery needs the session workspace path, which is unknown')
+  const face = await remote()
   if (face === undefined) throw new Error('file-mode delivery needs the Remote service, which is unavailable')
-  const published = await face.publishPaste({ id: entry.id, cwd: entry.cwd })
-  if (!published.ok) throw new Error(`file-mode delivery failed: ${JSON.stringify(published.error)}`)
-  const name = `pasted-text-${entry.id}.md`
-  return `File "${name}" (${published.value.bytes} bytes): verbatim read-only copy saved at "${published.value.path}". Read that path with your file tools when its contents are needed.`
+  if (typeof face.storePaste === 'function') {
+    const stored = await face.storePaste({
+      id: entry.id,
+      text: entry.text,
+      mode: entry.mode,
+      createdAt: entry.createdAt,
+      cwd,
+      fileExtension: entry.fileExtension,
+    })
+    if (!stored.ok) throw new Error(`file-mode delivery storage failed: ${remoteErrorMessage(stored.error)}`)
+  }
+  const published = await face.publishPaste({ id: entry.id, cwd })
+  if (!published.ok) throw new Error(`file-mode delivery failed: ${remoteErrorMessage(published.error)}`)
+  return `@${published.value.relativePath}`
+}
+
+function remoteErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message !== '') return error.message
+  if (typeof error === 'string' && error !== '') return error
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
 }
 
 /**
@@ -32,7 +57,8 @@ async function serializeAsFile(
 export function createClipSource(
   clips: ClipStore,
   openPanel: (id: string) => void,
-  remote: () => BetterComposerRemoteFace | undefined,
+  remote: RemoteProvider,
+  resolveCwd?: () => string,
 ): InputTriggerSource {
   return {
     trigger: '@',
@@ -45,7 +71,7 @@ export function createClipSource(
       serialize: async ref => {
         const entry = await clips.resolve(ref)
         if (entry === undefined) throw new Error(`pasted text clip ${JSON.stringify(ref)} is no longer available`)
-        return entry.mode === 'file' ? serializeAsFile(entry, remote) : entry.text
+        return entry.mode === 'file' ? serializeAsFile(entry, remote, resolveCwd) : entry.text
       },
     },
     openReference: (_session, reference) => {

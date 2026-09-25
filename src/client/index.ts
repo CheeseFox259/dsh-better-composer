@@ -1,29 +1,26 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import { subscribeGrammarLoaded } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
-import { createDecorationProvider } from './decoration-provider.ts'
-import { createEnabledActions } from '../commands/actions.ts'
 import { BetterComposerSettingsCard } from './settings-card.tsx'
 import { createEditorContribution } from './editor.tsx'
 import { SETTINGS_NAMESPACE } from '../settings.ts'
 import { BetterComposerSettingsStore } from './settings-store.ts'
 import { installStyles } from './styles.ts'
-import { betterComposerRemote, betterComposerRemoteContribution, publishRemoteState, remoteSnapshot } from './remote.ts'
+import { betterComposerRemote, betterComposerRemoteContribution, getRemoteFace, publishRemoteState, remoteSnapshot } from './remote.ts'
 import { ClipStore } from './clip-store.ts'
-import { convertInsertionToClip } from './clip-convert.ts'
 import { createClipSource, CLIP_SOURCE } from './clip-source.ts'
 import { CLIP_TAB_ID, CLIP_TAB_KIND, clipTabDefinition, ClipPanel } from './clip-panel.tsx'
 import {
   CONTEXT_MAP_TAB_ID, CONTEXT_MAP_TAB_KIND, contextMapTabDefinition, ContextMapButton, ContextMapPanel,
   publishContextMapOpener, type ContextMapProbe,
 } from './context-map-panel.tsx'
+import { ComposerExpandButton } from './expand-button.tsx'
 
-/** Required client services for the generic composer contribution. */
-export const inject = ['conversation', 'slots', 'settingsScope', 'remote', 'inputTriggers', 'sessions']
+/** Required client services for the composer contribution. */
+export const inject = ['conversation', 'slots', 'configForms', 'remote', 'inputTriggers', 'sessions']
 
 /** Optional services older hosts may not provide; absent in bare test contexts. */
 function optionalService<T>(ctx: ClientContext, name: string): T | undefined {
@@ -37,15 +34,15 @@ function optionalService<T>(ctx: ClientContext, name: string): T | undefined {
 async function resolveClipModel(
   ctx: ClientContext,
   sessionId: string,
-): Promise<{ readonly provider: string; readonly model: string } | undefined> {
+): Promise<{ readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | undefined> {
   const sessions = ctx.sessions
   if (sessions === undefined) return undefined
   const binding = sessions.binding(sessionId as never)
   const projections = binding?.session.projections as {
     readonly faceOf?: (key: string) => {
       getSnapshot?: () => {
-        readonly next?: { readonly provider: string; readonly model: string } | null
-        readonly lastUsed?: { readonly provider: string; readonly model: string } | null
+        readonly next?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
+        readonly lastUsed?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
       } | undefined
     } | undefined
   } | undefined
@@ -53,7 +50,7 @@ async function resolveClipModel(
   const route = projected?.next ?? projected?.lastUsed
   if (route !== null && route !== undefined) return route
   const sessionRemote = optionalService<{
-    modelCatalog: () => Promise<{ readonly ok: boolean; readonly value?: { readonly default?: { readonly provider: string; readonly model: string } } }>
+    modelCatalog: () => Promise<{ readonly ok: boolean; readonly value?: { readonly default?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } } }>
   }>(ctx, 'remote.session')
   const catalog = await sessionRemote?.modelCatalog()
   return catalog?.ok === true ? catalog.value?.default : undefined
@@ -147,10 +144,6 @@ function createContextMapProbe(ctx: ClientContext, sessionId: string): ContextMa
     sourceUnsubs = undefined
   }
 
-  // Full-history pull: the event window opens on the session tail. Paging back
-  // to seq 1 prepends every earlier page; each prepend notifies subscribers,
-  // so the map repaints as history arrives. Older hosts without loadThrough
-  // report a settled (empty) load.
   let historyStarted = false
   let historyDone = false
   const loadAllHistory = (): void => {
@@ -216,92 +209,81 @@ function createContextMapProbe(ctx: ClientContext, sessionId: string): ContextMa
 /** Register production contributions through independent effect-owned disposers. */
 export function apply(ctx: ClientContext): void {
   installStyles(ctx)
-  const settings = new BetterComposerSettingsStore(ctx.settingsScope.bind({ namespace: SETTINGS_NAMESPACE }))
+  const settings = new BetterComposerSettingsStore(ctx.configForms.get(SETTINGS_NAMESPACE))
   ctx.effect(() => () => { settings.dispose() }, 'dsh-better-composer: settings store')
-  // The settings card needs only settingsScope and slots, so it registers
-  // before the composer-registry gate below.
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item', key: SETTINGS_NAMESPACE,
+
+  // Settings page: one tab inside the official Plugins section.
+  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
+    name: 'settings.plugins.tab',
+    id: SETTINGS_NAMESPACE,
+    order: 20,
+    label: 'Better Composer',
     inject: () => ({ settings }),
   }, BetterComposerSettingsCard))
-  // Older hosts may not expose the optional composer registries yet. Keep the
-  // native composer usable while the contribution is absent. The published
-  // conversation face may predate the decoration/action registries; the host
-  // runtime provides them on current harness versions.
-  const conversation = ctx.conversation as unknown as {
-    decorations?: { register(provider: unknown): () => void }
-    actions?: { register(action: unknown): () => void }
-  }
-  if (conversation.decorations === undefined || conversation.actions === undefined) return
-  const provider = createDecorationProvider(() => settings.get())
-  ctx.effect(() => {
-    let current = settings.get()
-    let dispose = conversation.decorations!.register(provider)
-    // Re-registering bumps Core's registry version, which re-collects ranges
-    // for the current draft: settings toggles and lazy Shiki grammar loads
-    // (which unlock token ranges the projection cache now re-derives) both
-    // repaint through this one path.
-    const reregister = () => {
-      dispose()
-      dispose = conversation.decorations!.register(provider)
-    }
-    const unsubscribe = settings.subscribe(() => {
-      const next = settings.get()
-      const changed = next.enabled !== current.enabled
-        || next.markdownVisual !== current.markdownVisual
-        || next.diagnostics !== current.diagnostics
-      current = next
-      if (!changed) return
-      reregister()
-    })
-    const unsubscribeGrammar = subscribeGrammarLoaded(reregister)
-    return () => {
-      unsubscribe()
-      unsubscribeGrammar()
-      dispose()
-    }
-  }, 'dsh-better-composer: markdown decorations')
-  for (const action of createEnabledActions(() => settings.get().enabled)) {
-    ctx.effect(() => conversation.actions!.register(action), `dsh-better-composer: action ${action.id}`)
-  }
-  const editor = createEditorContribution(settings, (context, detection) => {
-    if (!settings.get().enabled) return false
-    return convertInsertionToClip(ctx, clips, context, detection)
-  })
-  ctx.slots.inject('conversation.input.editor', () => ctx.slots.register({ name: 'conversation.input.editor' }, editor))
-  // Pasted-text clips: store + submit-time serializer + chip click → panel (M2).
-  // Older hosts may lack the Remote service or the input-trigger registry;
-  // each capability stays off there while the rest of the plugin works.
+
+  // Pasted-text clips: store + submit-time serializer + chip click → panel.
   const clips = new ClipStore({
     store: (entry) => {
-      const face = remoteSnapshot().face
-      if (face === undefined) return
-      void face.storePaste({ id: entry.id, text: entry.text, mode: entry.mode, createdAt: entry.createdAt, cwd: entry.cwd })
+      void getRemoteFace().then((face) => {
+        if (face === undefined) return
+        void face.storePaste({ id: entry.id, text: entry.text, mode: entry.mode, createdAt: entry.createdAt, cwd: entry.cwd, fileExtension: entry.fileExtension })
+      }, () => {})
     },
     load: async (id) => {
-      const face = remoteSnapshot().face
+      const face = await getRemoteFace()
       if (face === undefined) return undefined
       const result = await face.loadPaste({ id })
-      return result.ok ? result.value.text : undefined
+      if (!result.ok || result.value.text === undefined) return undefined
+      return {
+        text: result.value.text,
+        mode: result.value.mode,
+        createdAt: result.value.createdAt,
+        cwd: result.value.cwd,
+        fileExtension: result.value.fileExtension,
+      }
     },
   })
+
+  // Markdown overlay: presentation, self-painted highlights, structural
+  // block decorations, capture keymap, and long-paste conversion.
+  const editor = createEditorContribution(ctx, settings, clips)
+  ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
+    name: 'conversation.input.overlay',
+    id: 'dsh-better-composer.overlay',
+  }, editor))
+
   if (ctx.inputTriggers !== undefined) {
-    ctx.effect(() => ctx.inputTriggers.registerSource(createClipSource(clips, (id) => {
-      optionalService<{ openTab: (kind: string, options?: unknown) => void }>(ctx, 'sidebarRight')
-        ?.openTab(CLIP_TAB_KIND, { params: { id } })
-    }, () => remoteSnapshot().face)), 'dsh-better-composer: clip source')
+    ctx.effect(() => ctx.inputTriggers.registerSource(createClipSource(
+      clips,
+      (id) => {
+        optionalService<{ openTab: (kind: string, options?: unknown) => void }>(ctx, 'sidebarRight')
+          ?.openTab(CLIP_TAB_KIND, { params: { id } })
+      },
+      getRemoteFace,
+      () => {
+        const sessions = ctx.sessions
+        if (sessions === undefined) return ''
+        const list = sessions.list.getSnapshot() as { readonly byId?: Readonly<Record<string, { readonly cwd?: string }>> }
+        const cwds = new Set(Object.values(list.byId ?? {})
+          .map(session => session?.cwd)
+          .filter((cwd): cwd is string => typeof cwd === 'string' && cwd !== ''))
+        return cwds.size === 1 ? [...cwds][0]! : ''
+      },
+    )), 'dsh-better-composer: clip source')
   }
-  // Right-sidebar clip editor: type definition first, body under its key.
+
+  // Right-sidebar clip editor and context map.
   const sidebarRightTabs = optionalService<{ register: (definition: unknown) => () => void }>(ctx, 'sidebarRightTabs')
   if (sidebarRightTabs !== undefined) {
     ctx.effect(() => sidebarRightTabs.register(clipTabDefinition()), 'dsh-better-composer: clip tab type')
     ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
       name: 'sidebar.right.pane.tab', key: CLIP_TAB_ID,
-      inject: () => ({
+      inject: (sessionId: unknown) => ({
         clips,
-        remote: () => remoteSnapshot().face,
-        resolveModel: (sessionId: string) => resolveClipModel(ctx, sessionId),
-        fetchContext: (sessionId: string) => recentSessionMessages(ctx, sessionId),
+        remote: getRemoteFace,
+        resolveModel: (id: string) => resolveClipModel(ctx, id),
+        fetchContext: (id: string) => recentSessionMessages(ctx, id),
+        sessionId: String(sessionId),
       }),
     }, ClipPanel))
     ctx.effect(() => sidebarRightTabs.register(contextMapTabDefinition()), 'dsh-better-composer: context map tab type')
@@ -309,7 +291,13 @@ export function apply(ctx: ClientContext): void {
       name: 'sidebar.right.pane.tab', key: CONTEXT_MAP_TAB_ID,
       inject: (sessionId: unknown) => ({ probe: createContextMapProbe(ctx, String(sessionId)) }),
     }, ContextMapPanel))
-    // Composer toolbar entry: an icon button beside the send controls.
+
+    // Composer toolbar entries: expand button and context map button.
+    ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+      name: 'conversation.input.right',
+      id: 'dsh-better-composer.expand',
+      order: 10,
+    }, ComposerExpandButton))
     publishContextMapOpener(() => {
       optionalService<{ openTab: (kind: string, options?: unknown) => void }>(ctx, 'sidebarRight')
         ?.openTab(CONTEXT_MAP_TAB_KIND, { params: {} })
@@ -317,8 +305,10 @@ export function apply(ctx: ClientContext): void {
     ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
       name: 'conversation.input.right',
       id: 'dsh-better-composer.contextmap',
+      order: 20,
     }, ContextMapButton))
   }
+
   if (ctx.remote === undefined) return
   const mounted: Promise<() => Promise<void>> = ctx.remote.$mount(betterComposerRemoteContribution as never)
   void mounted.then((disposer) => {

@@ -8,6 +8,10 @@ export interface ContextTurnStat {
   readonly assistantTokens: number
   /** Tool calls executed inside this turn. */
   readonly toolCalls: number
+  /** Estimated tokens from tool results. */
+  readonly toolTokens: number
+  /** Raw characters from tool results. */
+  readonly toolChars: number
   /** File blocks carried by this turn's messages. */
   readonly fileRefs: number
   /** Image blocks carried by this turn's messages. */
@@ -33,6 +37,44 @@ export interface ContextSummary {
 
 const CHARS_PER_TOKEN = 4
 const TURN_LIMIT = 20
+
+/**
+ * Shared turn bucketing for the summary and the browser. Explicit `turn`
+ * fields always win; without them a user message starts the next sequential
+ * turn while assistant/tool events join the current one. Both folds use this
+ * tracker so the growth chart and the message drill-down never disagree about
+ * which turn an event belongs to.
+ */
+interface TurnTracker {
+  /** A user message: explicit turn, else the next sequential turn. */
+  userTurn(explicit: number | undefined): number
+  /** A non-user event: explicit turn, else the current turn (1 when none). */
+  currentTurn(explicit: number | undefined): number
+}
+
+function createTurnTracker(): TurnTracker {
+  let last = 0
+  const note = (explicit: number | undefined): number | undefined => {
+    if (explicit === undefined) return undefined
+    last = Math.max(last, explicit)
+    return explicit
+  }
+  return {
+    userTurn(explicit) {
+      const noted = note(explicit)
+      if (noted !== undefined) return noted
+      last += 1
+      return last
+    },
+    currentTurn(explicit) {
+      return note(explicit) ?? Math.max(1, last)
+    },
+  }
+}
+
+function explicitTurn(data: { readonly turn?: unknown } | undefined): number | undefined {
+  return typeof data?.turn === 'number' && Number.isInteger(data.turn) && data.turn > 0 ? data.turn : undefined
+}
 
 interface RawEvent {
   readonly type?: string
@@ -90,8 +132,17 @@ export function summarizeContextWindow(
   let clipRefs = 0
   let estimatedChars = 0
   let assistantOutputTokens = 0
-  let turnIndex = 0
-  interface MutableTurn { index: number; userTokens: number; assistantTokens: number; toolCalls: number; fileRefs: number; imageCount: number }
+  const tracker = createTurnTracker()
+  interface MutableTurn {
+    index: number
+    userTokens: number
+    assistantTokens: number
+    toolCalls: number
+    toolTokens: number
+    toolChars: number
+    fileRefs: number
+    imageCount: number
+  }
   const turns: MutableTurn[] = []
 
   const turnAt = (index: number): MutableTurn => {
@@ -99,7 +150,10 @@ export function summarizeContextWindow(
     if (last !== undefined && last.index === index) return last
     const existing = turns.find(candidate => candidate.index === index)
     if (existing !== undefined) return existing
-    const created: MutableTurn = { index, userTokens: 0, assistantTokens: 0, toolCalls: 0, fileRefs: 0, imageCount: 0 }
+    const created: MutableTurn = {
+      index, userTokens: 0, assistantTokens: 0, toolCalls: 0,
+      toolTokens: 0, toolChars: 0, fileRefs: 0, imageCount: 0,
+    }
     turns.push(created)
     return created
   }
@@ -114,12 +168,11 @@ export function summarizeContextWindow(
     switch (event.type) {
       case 'user/message': {
         const { chars, files, images } = textLengthOf(messageData(data).content)
-        turnIndex += 1
         userMessages += 1
         fileRefs += files
         imageCount += images
         estimatedChars += chars
-        const current = turnAt(turnIndex)
+        const current = turnAt(tracker.userTurn(explicitTurn(data)))
         current.userTokens += Math.ceil(chars / CHARS_PER_TOKEN)
         current.fileRefs += files
         current.imageCount += images
@@ -134,7 +187,7 @@ export function summarizeContextWindow(
         imageCount += images
         estimatedChars += chars
         assistantOutputTokens += output
-        const current = turnAt(turnIndex)
+        const current = turnAt(tracker.currentTurn(explicitTurn(data)))
         current.assistantTokens += output > 0 ? output : Math.ceil(chars / CHARS_PER_TOKEN)
         current.fileRefs += files
         current.imageCount += images
@@ -142,13 +195,20 @@ export function summarizeContextWindow(
       }
       case 'tool/call': {
         toolCalls += 1
-        const turnNumber = (data as { readonly turn?: unknown })?.turn
-        turnAt(typeof turnNumber === 'number' ? turnNumber : turnIndex).toolCalls += 1
+        turnAt(tracker.currentTurn(explicitTurn(data))).toolCalls += 1
         break
       }
-      case 'tool/result':
+      case 'tool/result': {
         toolResults += 1
+        const parts = messageData(data)
+        const { chars, files, images } = textLengthOf(parts.content)
+        const current = turnAt(tracker.currentTurn(explicitTurn(data)))
+        current.toolChars += chars
+        current.toolTokens += Math.ceil(chars / CHARS_PER_TOKEN)
+        current.fileRefs += files
+        current.imageCount += images
         break
+      }
       default:
         break
     }
@@ -178,7 +238,7 @@ export function formatTokens(value: number): string {
 
 /** One message inside a step of the context browser. */
 export interface BrowserMessage {
-  readonly role: 'user' | 'assistant'
+  readonly role: 'user' | 'assistant' | 'tool'
   /** user/message source kind ('direct' | 'injected' | ...) when present. */
   readonly source?: string
   readonly chars: number
@@ -212,7 +272,10 @@ export interface BrowserTurn {
   readonly steps: readonly BrowserStep[]
   readonly userChars: number
   readonly assistantChars: number
+  readonly toolChars: number
   readonly outputTokens: number
+  /** Same effective token count as ContextTurnStat.assistantTokens. */
+  readonly assistantTokens: number
 }
 
 /** A rendered system prompt node on the surface. */
@@ -313,18 +376,18 @@ export function buildContextBrowser(entries: readonly unknown[]): ContextBrowser
   const tools: BrowserTool[] = []
   let headerRoute: string | undefined
   interface MutableStep { index: number; startSeq: number; messages: BrowserMessage[]; toolNames: string[] }
-  interface MutableTurn { index: number; startSeq: number; endSeq?: number; steps: MutableStep[]; userChars: number; assistantChars: number; outputTokens: number }
+  interface MutableTurn { index: number; startSeq: number; endSeq?: number; steps: MutableStep[]; userChars: number; assistantChars: number; toolChars: number; outputTokens: number; assistantTokens: number }
   const turns: MutableTurn[] = []
+  const tracker = createTurnTracker()
   let compacting = false
   const compactTurns: number[] = []
   const openCompactions = new Set<string>()
 
   const turn = (index: number, startSeq: number): MutableTurn => {
-    let current = turns.at(-1)
-    if (current === undefined || current.index !== index) {
-      current = { index, startSeq, endSeq: undefined, steps: [], userChars: 0, assistantChars: 0, outputTokens: 0 }
-      turns.push(current)
-    }
+    const existing = turns.find(candidate => candidate.index === index)
+    if (existing !== undefined) return existing
+    const current: MutableTurn = { index, startSeq, endSeq: undefined, steps: [], userChars: 0, assistantChars: 0, toolChars: 0, outputTokens: 0, assistantTokens: 0 }
+    turns.push(current)
     return current
   }
   const step = (turnIndex: number, stepIndex: number, startSeq: number): MutableStep => {
@@ -373,7 +436,7 @@ export function buildContextBrowser(entries: readonly unknown[]): ContextBrowser
         break
       }
       case 'turn/start':
-        if (typeof data?.turn === 'number') turn(data.turn, seq)
+        if (explicitTurn(data) !== undefined) turn(tracker.currentTurn(explicitTurn(data)), seq)
         break
       case 'turn/end': {
         if (typeof data?.turn !== 'number') break
@@ -382,12 +445,12 @@ export function buildContextBrowser(entries: readonly unknown[]): ContextBrowser
         break
       }
       case 'step/start':
-        if (typeof data?.turn === 'number' && typeof data?.step === 'number') step(data.turn, data.step, seq)
+        if (explicitTurn(data) !== undefined && typeof data?.step === 'number') step(tracker.currentTurn(explicitTurn(data)), data.step, seq)
         break
       case 'user/message': {
         const message = messageData(data)
         const { text, chars, fileNames } = textBlocksOf(message.content)
-        const turnIndex = typeof data?.turn === 'number' ? data.turn : Math.max(1, turns.length)
+        const turnIndex = tracker.userTurn(explicitTurn(data))
         const stepIndex = typeof data?.step === 'number' ? data.step : 1
         const currentStep = step(turnIndex, stepIndex, seq)
         const replace = message.surfaceOp?.op === 'replace'
@@ -408,7 +471,7 @@ export function buildContextBrowser(entries: readonly unknown[]): ContextBrowser
         const message = messageData(data)
         const { text, chars } = textBlocksOf(message.content)
         const output = outputTokensOf(message.usage)
-        const turnIndex = typeof data?.turn === 'number' ? data.turn : Math.max(1, turns.length)
+        const turnIndex = tracker.currentTurn(explicitTurn(data))
         const stepIndex = typeof data?.step === 'number' ? data.step : 1
         const currentStep = step(turnIndex, stepIndex, seq)
         currentStep.messages.push({
@@ -422,7 +485,17 @@ export function buildContextBrowser(entries: readonly unknown[]): ContextBrowser
         if (currentTurn !== undefined) {
           currentTurn.assistantChars += chars
           currentTurn.outputTokens += output
+          currentTurn.assistantTokens += output > 0 ? output : Math.ceil(chars / CHARS_PER_TOKEN)
         }
+        break
+      }
+      case 'tool/result': {
+        const message = messageData(data)
+        const { text, chars } = textBlocksOf(message.content)
+        const turnIndex = tracker.currentTurn(explicitTurn(data))
+        const stepIndex = typeof data?.step === 'number' ? data.step : 1
+        step(turnIndex, stepIndex, seq).messages.push({ role: 'tool', chars, text })
+        turns.find(candidate => candidate.index === turnIndex)!.toolChars += chars
         break
       }
       case 'tool/call': {
@@ -435,8 +508,9 @@ export function buildContextBrowser(entries: readonly unknown[]): ContextBrowser
         const name = typeof call?.name === 'string' && call.name !== ''
           ? call.name
           : typeof call?.message?.source?.name === 'string' ? call.message.source.name : ''
-        if (name !== '' && typeof call?.turn === 'number' && typeof call?.step === 'number') {
-          step(call.turn, call.step, seq).toolNames.push(name)
+        const callTurn = explicitTurn(call)
+        if (name !== '' && callTurn !== undefined && typeof call?.step === 'number') {
+          step(tracker.currentTurn(callTurn), call.step, seq).toolNames.push(name)
         }
         break
       }
@@ -466,7 +540,9 @@ export function buildContextBrowser(entries: readonly unknown[]): ContextBrowser
     systemNodes,
     tools,
     headerRoute,
-    turns: orderedTurns,
+    turns: orderedTurns.map(({ index, startSeq, endSeq, steps, userChars, assistantChars, toolChars, outputTokens, assistantTokens }) => ({
+      index, startSeq, endSeq, steps, userChars, assistantChars, toolChars, outputTokens, assistantTokens,
+    })),
     compacting,
     compactTurns,
   }

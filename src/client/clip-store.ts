@@ -1,3 +1,5 @@
+import { DEFAULT_PASTE_FILE_EXTENSION, normalizePasteFileExtension, type PasteFileExtension } from '../file-extensions.ts'
+
 /** Delivery mode of one stored pasted-text clip. */
 export type ClipMode = 'inline' | 'file'
 
@@ -9,12 +11,14 @@ export interface ClipEntry {
   readonly createdAt: number
   /** Workspace cwd captured at creation; file-mode delivery materializes under it. */
   readonly cwd: string
+  /** Extension selected when this clip was created. */
+  readonly fileExtension: PasteFileExtension
 }
 
 /** Persistence bridge supplied by the Remote wiring; both are fire-safe. */
 export interface ClipPersistence {
   readonly store: (entry: ClipEntry) => void
-  readonly load: (id: string) => Promise<string | undefined>
+  readonly load: (id: string) => Promise<Pick<ClipEntry, 'text' | 'mode' | 'createdAt' | 'cwd' | 'fileExtension'> | undefined>
 }
 
 /**
@@ -29,7 +33,7 @@ export class ClipStore {
   constructor(private readonly persistence: ClipPersistence) {}
 
   /** Store one freshly detected paste and return its entry. */
-  create(text: string, cwd = ''): ClipEntry {
+  create(text: string, cwd = '', fileExtension: PasteFileExtension = DEFAULT_PASTE_FILE_EXTENSION, persist = true): ClipEntry {
     this.sequence += 1
     const entry: ClipEntry = {
       id: `clip-${Date.now().toString(36)}-${this.sequence}`,
@@ -37,10 +41,16 @@ export class ClipStore {
       mode: 'inline',
       createdAt: Date.now(),
       cwd,
+      fileExtension,
     }
     this.entries.set(entry.id, entry)
-    this.persistence.store(entry)
+    if (persist) this.persistence.store(entry)
     return entry
+  }
+
+  /** Persist a previously created entry after its reference insertion succeeds. */
+  persist(entry: ClipEntry): void {
+    if (this.entries.get(entry.id) === entry) this.persistence.store(entry)
   }
 
   /** The in-memory entry, when the clip was created by this page. */
@@ -52,9 +62,9 @@ export class ClipStore {
   async resolve(id: string): Promise<ClipEntry | undefined> {
     const cached = this.entries.get(id)
     if (cached !== undefined) return cached
-    const text = await this.persistence.load(id)
-    if (text === undefined) return undefined
-    const entry: ClipEntry = { id, text, mode: 'inline', createdAt: Date.now(), cwd: '' }
+    const persisted = await this.persistence.load(id)
+    if (persisted === undefined) return undefined
+    const entry: ClipEntry = { id, ...persisted, fileExtension: normalizePasteFileExtension(persisted.fileExtension) }
     this.entries.set(id, entry)
     return entry
   }
@@ -74,6 +84,16 @@ export class ClipStore {
     const current = this.entries.get(id)
     if (current === undefined) return undefined
     const next: ClipEntry = { ...current, mode }
+    this.entries.set(id, next)
+    this.persistence.store(next)
+    return next
+  }
+
+  /** Switch the workspace file extension and re-persist. */
+  setFileExtension(id: string, fileExtension: PasteFileExtension): ClipEntry | undefined {
+    const current = this.entries.get(id)
+    if (current === undefined) return undefined
+    const next: ClipEntry = { ...current, fileExtension: normalizePasteFileExtension(fileExtension) }
     this.entries.set(id, next)
     this.persistence.store(next)
     return next

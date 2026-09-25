@@ -62,7 +62,7 @@ describe('M5 deterministic completion and diagnostics', () => {
     })).toEqual(expect.objectContaining({ from: 10, to: 10 }))
   })
 
-  it('projects a deterministic heading-marker spacing candidate without changing source', async () => {
+  it('does not render a passive completion for a bare heading marker', async () => {
     const completionModule = await import('../../src/markdown/completion.ts')
     const markdownCompletion = Reflect.get(completionModule, 'markdownCompletion')
     expect(markdownCompletion).toEqual(expect.any(Function))
@@ -75,13 +75,7 @@ describe('M5 deterministic completion and diagnostics', () => {
       nativeRanges: [],
       composing: false,
       triggerOwner: 'none',
-    })).toEqual({
-      revision: 12,
-      kind: 'popup',
-      from: 1,
-      to: 1,
-      candidates: [{ label: '标题空格', insertText: ' ' }],
-    })
+    })).toBeUndefined()
   })
 
   it('projects a revision-bound deterministic ghost without owning source', async () => {
@@ -245,6 +239,26 @@ describe('M5 deterministic completion and diagnostics', () => {
       apply: () => { throw new Error('Escape must not edit source') },
     })).toBe('consumed')
     expect(extension.present(context)?.ghost).toBeUndefined()
+  })
+
+  it('passes popup Enter through instead of accepting the passive first candidate', () => {
+    const settings = { get: () => DEFAULT_SETTINGS } as never
+    const extension = createMarkdownSurfaceExtension(settings)
+    const context = {
+      draft: '```',
+      draftRev: 25,
+      selection: { start: 3, end: 3 },
+      textSegments: [{ start: 0, end: 3, text: '```' }],
+      nativeRanges: [],
+      composing: false,
+      triggerOwner: 'none' as const,
+    }
+    const presentation = extension.present(context)
+    expect(presentation?.popup).toBeDefined()
+    expect(extension.handleKey?.({
+      key: 'enter', shift: false, context, presentation: presentation!,
+      apply: () => { throw new Error('Enter must remain native') },
+    })).toBe('pass')
   })
 
   it('keeps Markdown parsing local to Core text segments', () => {

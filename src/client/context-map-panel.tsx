@@ -162,7 +162,7 @@ export function ContextMapPanel({ sessionId = '', probe }: ContextMapPanelProps)
   const occupancy = window !== undefined && window > 0 ? Math.min(1, projected / window) : undefined
 
   const compositionTotal = Math.max(1, measuredTotal)
-  const turnMax = Math.max(1, ...summary.turns.map(turn => Math.max(turn.userTokens, turn.assistantTokens)))
+  const turnMax = Math.max(1, ...summary.turns.map(turn => turn.userTokens + turn.assistantTokens + turn.toolTokens))
 
   const input = numberOf(usage.uncachedInputTokens) ?? 0
   const output = numberOf(usage.outputTokens) ?? 0
@@ -202,22 +202,41 @@ export function ContextMapPanel({ sessionId = '', probe }: ContextMapPanelProps)
         {estimated ? <span className="dsh-better-composer-ctxmap-badge">估算</span> : null}
         {browser.compacting ? <span className="dsh-better-composer-ctxmap-badge" data-live>压缩中…</span> : null}
       </header>
-      <div className="dsh-better-composer-ctxmap-figure">
-        <span className="dsh-better-composer-ctxmap-big">{formatTokens(projected)}</span>
-        <span className="dsh-better-composer-ctxmap-unit">{window !== undefined ? `/ ${formatTokens(window)} tokens` : 'tokens'}</span>
-      </div>
-      <div
-        className="dsh-better-composer-ctxmap-gauge"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={occupancy === undefined ? undefined : Math.round(occupancy * 100)}
-      >
-        <div
-          className="dsh-better-composer-ctxmap-gauge-fill"
-          data-level={occupancy === undefined ? 'unknown' : occupancy < 0.6 ? 'low' : occupancy < 0.85 ? 'mid' : 'high'}
-          style={{ width: `${occupancy === undefined ? 0 : Math.max(2, occupancy * 100)}%` }}
-        />
+      <div className="dsh-better-composer-ctxmap-occupancy">
+        <div className="dsh-better-composer-ctxmap-occupancy-info">
+          <div className="dsh-better-composer-ctxmap-figure">
+            <span className="dsh-better-composer-ctxmap-big">{formatTokens(projected)}</span>
+            <span className="dsh-better-composer-ctxmap-unit">{window !== undefined ? `/ ${formatTokens(window)} tokens` : 'tokens'}</span>
+          </div>
+          <p className="dsh-better-composer-ctxmap-sub">
+            {occupancy === undefined
+              ? '窗口大小未知，按已测量构成估算。'
+              : occupancy < 0.6
+                ? '余量充足。'
+                : occupancy < 0.85
+                  ? '占用偏高，可考虑压缩。'
+                  : '接近窗口上限，建议压缩或分叉。'}
+          </p>
+        </div>
+        <svg
+          className="dsh-better-composer-ctxmap-donut"
+          viewBox="0 0 96 96"
+          role="img"
+          aria-label={occupancy === undefined ? '占用未知' : `上下文占用 ${Math.round(occupancy * 100)}%`}
+        >
+          <circle className="dsh-better-composer-ctxmap-donut-track" cx="48" cy="48" r="40" />
+          <circle
+            className="dsh-better-composer-ctxmap-donut-fill"
+            cx="48" cy="48" r="40"
+            data-level={occupancy === undefined ? 'unknown' : occupancy < 0.6 ? 'low' : occupancy < 0.85 ? 'mid' : 'high'}
+            strokeDasharray={`${(occupancy ?? 0) * 251.33} 251.33`}
+            transform="rotate(-90 48 48)"
+          />
+          <text className="dsh-better-composer-ctxmap-donut-label" x="48" y="47" textAnchor="middle">
+            {occupancy === undefined ? '—' : `${Math.round(occupancy * 100)}%`}
+          </text>
+          <text className="dsh-better-composer-ctxmap-donut-caption" x="48" y="61" textAnchor="middle">已用</text>
+        </svg>
       </div>
       <div className="dsh-better-composer-ctxmap-actions">
         <button
@@ -265,9 +284,12 @@ export function ContextMapPanel({ sessionId = '', probe }: ContextMapPanelProps)
         })}
       </div>
       <ul className="dsh-better-composer-ctxmap-legend">
-        <li onMouseEnter={() => { setHoverKind('system') }} onMouseLeave={() => { setHoverKind(undefined) }}><i data-kind="system" />系统 · {formatTokens(system)}</li>
-        <li onMouseEnter={() => { setHoverKind('tools') }} onMouseLeave={() => { setHoverKind(undefined) }}><i data-kind="tools" />工具 · {formatTokens(toolsTokens)}</li>
-        <li onMouseEnter={() => { setHoverKind('messages') }} onMouseLeave={() => { setHoverKind(undefined) }}><i data-kind="messages" />消息 · {formatTokens(messagesTokens)}</li>
+        {([['system', system, '系统'], ['tools', toolsTokens, '工具'], ['messages', messagesTokens, '消息']] as const).map(([kind, value, label]) => (
+          <li key={kind} onMouseEnter={() => { setHoverKind(kind) }} onMouseLeave={() => { setHoverKind(undefined) }}>
+            <i data-kind={kind} />{label} · {formatTokens(value)}
+            <span className="dsh-better-composer-ctxmap-legend-pct">{Math.round(value / compositionTotal * 100)}%</span>
+          </li>
+        ))}
       </ul>
       <BrowserSection tab={tab} browser={browser} isOpen={isOpen} toggle={toggle} anchors={anchors} onAnchor={toggleAnchor} onFork={runFork} loading={probe.historyLoading()} />
     </section>
@@ -315,22 +337,30 @@ export function ContextMapPanel({ sessionId = '', probe }: ContextMapPanelProps)
       </header>
       {summary.turns.length === 0
         ? <p className="dsh-better-composer-ctxmap-sub">{probe.historyLoading() ? '正在加载更早历史…' : '暂无对话内容'}</p>
-        : <div className="dsh-better-composer-ctxmap-bars" role="group" aria-label="逐轮 tokens">
-          {summary.turns.map(turn => <button
-            key={turn.index}
-            type="button"
-            className="dsh-better-composer-ctxmap-bar"
-            data-anchored={anchors.includes(turn.index) ? 'true' : undefined}
-            data-selected={selectedTurn === turn.index ? 'true' : undefined}
-            aria-pressed={selectedTurn === turn.index}
-            aria-label={`第 ${turn.index} 轮 · ${formatTokens(turn.userTokens + turn.assistantTokens)} tokens`}
-            title={`第 ${turn.index} 轮 · ${formatTokens(turn.userTokens + turn.assistantTokens)} tokens${anchors.includes(turn.index) ? ' · 已锚定' : ''}`}
-            onClick={() => { setSelectedTurn(previous => previous === turn.index ? undefined : turn.index) }}
-          >
-            <i data-kind="assistant" style={{ height: `${turn.assistantTokens / turnMax * 100}%` }} />
-            <i data-kind="user" style={{ height: `${turn.userTokens / turnMax * 100}%` }} />
-          </button>)}
-        </div>}
+        : <>
+          <div className="dsh-better-composer-ctxmap-bars" role="group" aria-label="逐轮 tokens">
+            {summary.turns.map(turn => <button
+              key={turn.index}
+              type="button"
+              className="dsh-better-composer-ctxmap-bar"
+              data-anchored={anchors.includes(turn.index) ? 'true' : undefined}
+              data-selected={selectedTurn === turn.index ? 'true' : undefined}
+              aria-pressed={selectedTurn === turn.index}
+              aria-label={`第 ${turn.index} 轮 · ${formatTokens(turn.userTokens + turn.assistantTokens + turn.toolTokens)} tokens`}
+              title={`第 ${turn.index} 轮 · 用户 ${formatTokens(turn.userTokens)} · 助手 ${formatTokens(turn.assistantTokens)}${turn.toolTokens > 0 ? ` · 工具 ${formatTokens(turn.toolTokens)}` : ''}${anchors.includes(turn.index) ? ' · 已锚定' : ''}`}
+              onClick={() => { setSelectedTurn(previous => previous === turn.index ? undefined : turn.index) }}
+            >
+              <i data-kind="assistant" style={{ height: `${turn.assistantTokens / turnMax * 100}%`, minHeight: turn.assistantTokens > 0 ? 3 : 0 }} />
+              <i data-kind="tool" style={{ height: `${turn.toolTokens / turnMax * 100}%`, minHeight: turn.toolTokens > 0 ? 3 : 0 }} />
+              <i data-kind="user" style={{ height: `${turn.userTokens / turnMax * 100}%`, minHeight: turn.userTokens > 0 ? 3 : 0 }} />
+              {anchors.includes(turn.index) ? <b className="dsh-better-composer-ctxmap-bar-anchor" aria-hidden /> : null}
+            </button>)}
+          </div>
+          <div className="dsh-better-composer-ctxmap-bars-axis" aria-hidden>
+            <span>第 {summary.turns[0]!.index} 轮</span>
+            {summary.turns.length > 1 ? <span>第 {summary.turns.at(-1)!.index} 轮</span> : null}
+          </div>
+        </>}
       {selectedTurn !== undefined ? <TurnDetail
         turn={selectedTurn}
         stat={summary.turns.find(candidate => candidate.index === selectedTurn)}
@@ -375,12 +405,13 @@ function TurnDetail({
       ? <div className="dsh-better-composer-ctxmap-grid">
         <div className="dsh-better-composer-ctxmap-stat"><strong>{formatTokens(stat.userTokens)}</strong><span>用户 tokens</span></div>
         <div className="dsh-better-composer-ctxmap-stat"><strong>{formatTokens(stat.assistantTokens)}</strong><span>助手 tokens</span></div>
+        <div className="dsh-better-composer-ctxmap-stat"><strong>{formatTokens(stat.toolTokens)}</strong><span>工具 tokens</span></div>
         <div className="dsh-better-composer-ctxmap-stat"><strong>{stat.toolCalls}</strong><span>工具调用</span></div>
         <div className="dsh-better-composer-ctxmap-stat"><strong>{stat.fileRefs + stat.imageCount}</strong><span>文件与图片</span></div>
       </div>
       : null}
     {browserTurn !== undefined
-      ? <p className="dsh-better-composer-ctxmap-sub">{browserTurn.steps.length} 步 · 用户 {formatTokens(Math.ceil(browserTurn.userChars / 4))} · 输出 {formatTokens(browserTurn.outputTokens)} tok</p>
+      ? <p className="dsh-better-composer-ctxmap-sub">{browserTurn.steps.length} 步 · 用户 {formatTokens(Math.ceil(browserTurn.userChars / 4))} tok · 助手 {formatTokens(browserTurn.outputTokens || Math.ceil(browserTurn.assistantChars / 4))} tok{browserTurn.toolChars > 0 ? ' · 工具 ' + formatTokens(Math.ceil(browserTurn.toolChars / 4)) + ' tok' : ''}</p>
       : null}
     {topTools.length > 0
       ? <div className="dsh-better-composer-ctxmap-chips">
@@ -463,7 +494,7 @@ function BrowserSection({
             <span className="dsh-better-composer-ctxmap-chevron" aria-hidden>{isOpen(key) ? '▾' : '▸'}</span>
             <span className="dsh-better-composer-ctxmap-row-main">
               <strong>第 {turn.index} 轮</strong>
-              <small>{turn.steps.length} 步 · 用户 {formatTokens(Math.ceil(turn.userChars / 4))} · 输出 {formatTokens(turn.outputTokens)} tok</small>
+              <small>{turn.steps.length} 步 · 用户 {formatTokens(Math.ceil(turn.userChars / 4))} tok · 助手 {formatTokens(turn.assistantTokens)} tok{turn.toolChars > 0 ? ' · 工具 ' + formatTokens(Math.ceil(turn.toolChars / 4)) + ' tok' : ''}</small>
             </span>
           </button>
           {browser.compactTurns.includes(turn.index) ? <span className="dsh-better-composer-ctxmap-badge">压缩点</span> : null}
@@ -512,7 +543,7 @@ function BrowserSection({
                 <button type="button" className="dsh-better-composer-ctxmap-row" data-indent2 aria-expanded={isOpen(messageKey)} onClick={() => { toggle(messageKey) }}>
                   <span className="dsh-better-composer-ctxmap-dot" data-role={message.role} aria-hidden />
                   <span className="dsh-better-composer-ctxmap-row-main">
-                    <strong data-role={message.role}>{message.role === 'user' ? '用户' : '助手'}</strong>
+                    <strong data-role={message.role}>{message.role === 'user' ? '用户' : message.role === 'tool' ? '工具' : '助手'}</strong>
                     <small>
                       {message.role === 'user' && message.surfaceReplace ? '压缩摘要 · ' : ''}
                       {message.role === 'user' && message.source !== undefined && message.source !== 'direct' ? `${sourceLabel(message.source)} · ` : ''}
@@ -568,9 +599,10 @@ export function ContextMapButton(_props: ContextMapButtonProps) {
     onClick={openMap}
   >
     <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M2.5 13.5V9.5" />
-      <path d="M8 13.5V5.5" />
-      <path d="M13.5 13.5V2.5" />
+      <path d="M2 14h12" />
+      <path d="M4 14V9" />
+      <path d="M8 14V5" />
+      <path d="M12 14V2" />
     </svg>
   </button>
 }
