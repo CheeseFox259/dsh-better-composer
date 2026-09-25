@@ -142,7 +142,7 @@ Markdown provider 读取权威 Composer snapshot 并输出 UTF-16 source range�
 <a id="已知限制与暂不处理事项"></a>
 ## 已知限制与暂不处理事项
 
-宿主必须提供声明的 Composer、Settings、input-trigger、右栏与 Remote 公开 seam；老宿主缺失某一项时对应能力单独关闭。支持的代码语言与文件扩展名列表是有限且本地的。纯插件无法创建 Core 内部的附件 receipt，因此文件送达使用官方工作区 `@path` 引用约定，而不是伪造原生二进制附件。file 送达模式要求会话工作区路径已知；旧 clip（cwd 捕获前创建）切到 file 模式会在发送时以明确错误阻止而不是静默失败。粘贴检测无法区分粘贴与其他单步大插入（IME 整段提交、undo），阈值可降低误判但不能归零。浏览器验收属于宿主 release 流程；本仓库的自动化检查不能替代维护者的真实浏览器复核。
+宿主必须提供声明的 Composer、Settings、input-trigger、右栏与 Remote 公开 seam；老宿主缺失某一项时对应能力单独关闭。支持的代码语言与文件扩展名列表是有限且本地的。纯插件无法创建 Core 内部的附件 receipt，因此文件送达使用官方工作区 `@path` 引用约定，而不是伪造原生二进制附件。file 送达模式要求会话工作区路径已知；旧 clip（cwd 捕获前创建）切到 file 模式会在发送时以明确错误阻止而不是静默失败。粘贴检测无法区分粘贴与其他单步大插入（IME 整段提交、undo），阈值可降低误判但不能归零。Markdown 列表的换行自动补全（Enter / Shift+Enter 延续列表标记与退出）目前交由 DSH Core 原生逻辑处理。在纯插件化约束下，Core 基于 Lexical Plain-Text 运行且未开放段落级事务编辑接口；经由公开接口或 DOM 层直接干预会导致底层数据模型分歧、选区异常及渲染失配。详细的机制分析与上游接口演进讨论参见 [Issue #1 (RFC)](https://github.com/CheeseFox259/dsh-better-composer/issues/1)。浏览器验收属于宿主 release 流程；本仓库的自动化检查不能替代维护者的真实浏览器复核。
 
 <a id="开发说明"></a>
 ### 开发说明
