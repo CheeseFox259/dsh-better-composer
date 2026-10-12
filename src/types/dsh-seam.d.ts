@@ -210,6 +210,9 @@ declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
 }
 
 declare module '@deepseek-ai/dsh-client-ui-primitives' {
+  export function Button(props: { variant?: 'primary' | 'ghost' | 'outline' | 'toolbar'; size?: 'md' | 'sm'; icon?: import('react').ReactNode; className?: string; children?: import('react').ReactNode } & import('react').ButtonHTMLAttributes<HTMLButtonElement>): import('react').ReactElement
+  export function SegmentedControl<Value extends string>(props: { id: string; value: Value; options: readonly { value: Value; label: string; disabled?: boolean; title?: string }[]; onChange: (next: Value) => void; label: string; disabled?: boolean; className?: string }): import('react').ReactElement
+  export function Checkbox(props: { checked: boolean; onChange: (checked: boolean) => void; label: string; disabled?: boolean; title?: string; className?: string }): import('react').ReactElement
   import type { Root } from 'mdast'
 
   export function parseGfm(source: string): Root
@@ -264,6 +267,10 @@ declare module '@deepseek-ai/cordis' {
     inject(deps: readonly string[], fn: (scoped: Context) => void): void
     /** Service lookup by name. */
     get(name: string, strict?: boolean): unknown
+    /** Published Host service registration; disposer belongs to this fiber. */
+    reflect: { provide(name: string, value?: unknown): () => void }
+    /** Plugin teardown notification. */
+    on(name: 'dispose', listener: () => void): () => void
     /** Settings scope factory seat (declared by the settings host at runtime). */
     settingsScope: {
       bind(namespace: unknown): import('@deepseek-ai/dsh-client-ui-settings/client').SettingsScope<never>

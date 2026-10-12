@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createMarkdownProvider } from '../../src/markdown/provider.ts'
-import { detectLongInsertion } from '../../src/client/paste-watch.ts'
+import { decorateViaPlan } from '../helpers/project-ranges.ts'
 
 describe('projection performance budget', () => {
   it('records prose and code-heavy timings at every M7 workload size', () => {
@@ -23,11 +22,11 @@ describe('projection performance budget', () => {
       let codeRangeCount = 0
       for (let sample = 0; sample < 20; sample += 1) {
         const proseStarted = performance.now()
-        proseRangeCount = createMarkdownProvider().decorate({ sessionId: `perf-prose-${size}-${sample}` as never, draft: prose, draftRev: sample, nativeRanges: [] }).length
+        proseRangeCount = decorateViaPlan({ draft: prose, nativeRanges: [] }).length
         proseTimes.push(performance.now() - proseStarted)
 
         const codeStarted = performance.now()
-        codeRangeCount = createMarkdownProvider().decorate({ sessionId: `perf-code-${size}-${sample}` as never, draft: code, draftRev: sample, nativeRanges: [] }).length
+        codeRangeCount = decorateViaPlan({ draft: code, nativeRanges: [] }).length
         codeTimes.push(performance.now() - codeStarted)
       }
       timings[size] = {
@@ -45,25 +44,20 @@ describe('projection performance budget', () => {
     const steady: Record<number, { hitP95: number }> = {}
     for (const size of [1_000, 10_000, 50_000]) {
       const draft = `## Section\n\n${'body text with *emphasis* and \`code\` spans.\n\n'.repeat(Math.ceil(size / 48))}`
-      const provider = createMarkdownProvider()
       const context = (revision: number) => ({
-        sessionId: 'perf-steady' as never,
         draft,
-        draftRev: revision,
         nativeRanges: [],
         presentation: {
           focused: true,
           selectionStart: revision % draft.length,
           selectionEnd: revision % draft.length,
-          activeLineStart: 0,
-          activeLineEnd: draft.length,
         },
       })
-      provider.decorate(context(0))
+      decorateViaPlan(context(0))
       const times: number[] = []
       for (let sample = 0; sample < 60; sample += 1) {
         const started = performance.now()
-        provider.decorate(context(sample + 1))
+        decorateViaPlan(context(sample + 1))
         times.push(performance.now() - started)
       }
       steady[size] = { hitP95: percentile95(times) }
@@ -71,19 +65,6 @@ describe('projection performance budget', () => {
     console.log(`steady-collect-performance ${JSON.stringify(steady)}`)
     expect(Object.keys(steady)).toEqual(['1000', '10000', '50000'])
   }, 30_000)
-
-  it('records paste-detection cost at workload sizes', () => {
-    const payload = 'const value = 1\n'.repeat(4000)
-    const previous = 'before\n\nafter'
-    const next = `before\n${payload}\nafter`
-    const started = performance.now()
-    for (let sample = 0; sample < 200; sample += 1) {
-      detectLongInsertion(previous, next, 4000)
-    }
-    const elapsed = (performance.now() - started) / 200
-    console.log(`paste-detection ${JSON.stringify({ avgMs: elapsed })}`)
-    expect(elapsed).toBeLessThan(5)
-  })
 })
 
 function percentile95(values: readonly number[]): number {

@@ -4,7 +4,7 @@ import { typertPlugin } from '@deepseek-ai/dsh-typert-generator/tsdown'
 const PACKAGE_ID = '@cheesefox/dsh-better-composer'
 const nodeConfig: UserConfig = {
   name: PACKAGE_ID,
-  entry: ['src/index.ts'],
+  entry: { index: 'src/index.ts', 'doctor-compaction': 'src/doctor/compaction.ts' },
   outDir: 'lib',
   format: ['esm'],
   platform: 'node',

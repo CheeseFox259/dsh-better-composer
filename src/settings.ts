@@ -5,7 +5,8 @@ export const SETTINGS_NAMESPACE = 'dsh-better-composer'
 export interface BetterComposerSettings {
   enabled: boolean
   markdownVisual: boolean
-  diagnostics: boolean
+  /** How inactive-line syntax markers render: transparent, or dimmed. */
+  inactiveMarkerDisplay: InactiveMarkerDisplay
   toolbarMode: ToolbarMode
   /** Minimum pasted-text length that converts into a clip chip; 0 disables. */
   pasteClipThreshold: number
@@ -14,11 +15,14 @@ export interface BetterComposerSettings {
 /** Whether the formatting toolbar is compact or absent. */
 export type ToolbarMode = 'compact' | 'hidden'
 
+/** Inactive-line syntax marker presentation; the active line always reveals source. */
+export type InactiveMarkerDisplay = 'hide' | 'fade'
+
 /** Defaults used when no Settings provider or user override is available. */
 export const DEFAULT_SETTINGS: Readonly<BetterComposerSettings> = Object.freeze({
   enabled: true,
   markdownVisual: true,
-  diagnostics: true,
+  inactiveMarkerDisplay: 'hide',
   toolbarMode: 'compact',
   pasteClipThreshold: 4000,
 })
@@ -37,7 +41,9 @@ export function normalizeSettings(value: unknown): BetterComposerSettings {
   return {
     enabled: typeof record.enabled === 'boolean' ? record.enabled : DEFAULT_SETTINGS.enabled,
     markdownVisual: typeof record.markdownVisual === 'boolean' ? record.markdownVisual : DEFAULT_SETTINGS.markdownVisual,
-    diagnostics: typeof record.diagnostics === 'boolean' ? record.diagnostics : DEFAULT_SETTINGS.diagnostics,
+    inactiveMarkerDisplay: record.inactiveMarkerDisplay === 'hide' || record.inactiveMarkerDisplay === 'fade'
+      ? record.inactiveMarkerDisplay
+      : DEFAULT_SETTINGS.inactiveMarkerDisplay,
     toolbarMode: record.toolbarMode === 'hidden' || record.toolbarMode === 'compact'
       ? record.toolbarMode
       : DEFAULT_SETTINGS.toolbarMode,

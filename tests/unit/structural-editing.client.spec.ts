@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ComposerEditResult } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { runComposerStructuralCommand } from '../../src/markdown/structural-editing.ts'
+import { runComposerStructuralCommand, armBreakContinuation, settleBreakContinuation, type OrderedRenumberEdit } from '../../src/markdown/structural-editing.ts'
 
 interface Applied {
   readonly edit: ComposerEditResult
@@ -141,5 +141,114 @@ describe('composer structural editing', () => {
     const { result, applied } = run('shift-enter', draft, draft.length, { reject: true })
     expect(result.kind).toBe('noop')
     expect(applied).toHaveLength(0)
+  })
+})
+
+describe('break continuation (post-hoc Shift+Enter)', () => {
+  function arm(draft: string, caret: number | { start: number; end: number }, options?: {
+    readonly nativeRanges?: readonly { start: number; end: number; kind: string }[]
+  }) {
+    const selection = typeof caret === 'number' ? { start: caret, end: caret } : caret
+    return armBreakContinuation(draft, selection, options?.nativeRanges ?? [])
+  }
+
+  /** Simulate the host's native break, settle the intent, apply the follow-up. */
+  function continueAfterBreak(draft: string, caret: number): { readonly final: string; readonly edit: ComposerEditResult | undefined; readonly renumber: readonly OrderedRenumberEdit[] } {
+    const armed = arm(draft, caret)
+    if (armed === undefined) return { final: draft, edit: undefined, renumber: [] }
+    const broken = `${draft.slice(0, caret)}\n${draft.slice(caret)}`
+    const settled = settleBreakContinuation(armed, broken)
+    if (settled === undefined) return { final: broken, edit: undefined, renumber: [] }
+    return { final: nextDraft(broken, settled.edit), edit: settled.edit, renumber: settled.renumber }
+  }
+
+  /** Apply the renumber chain in order (it is stored reverse, last line first). */
+  function applyRenumber(baseDraft: string, renumber: readonly OrderedRenumberEdit[]): string {
+    let draft = baseDraft
+    for (const edit of [...renumber].reverse()) {
+      expect(draft.slice(edit.start, edit.end)).toBe(edit.expect)
+      draft = nextDraft(draft, edit)
+    }
+    return draft
+  }
+
+  it('continues an unordered item with its marker', () => {
+    const { final, edit } = continueAfterBreak('- 无序列表', '- 无序列表'.length)
+    expect(final).toBe('- 无序列表\n- ')
+    expect(edit?.selectionStart).toBe('- 无序列表\n- '.length)
+  })
+
+  it('continues a task item as unchecked and a quote with its marker', () => {
+    expect(continueAfterBreak('- [x] done', '- [x] done'.length).final).toBe('- [x] done\n- [ ] ')
+    expect(continueAfterBreak('> 引用内容', '> 引用内容'.length).final).toBe('> 引用内容\n> ')
+  })
+
+  it('continues an ordered item with the next number', () => {
+    expect(continueAfterBreak('2. second', '2. second'.length).final).toBe('2. second\n3. ')
+  })
+
+  it('renumbers the following ordered run after a mid-list split', () => {
+    const draft = '1. first\n2. second\n3. third'
+    const caret = '1. fir'.length
+    const { final, renumber } = continueAfterBreak(draft, caret)
+    expect(final).toBe('1. fir\n2. st\n2. second\n3. third')
+    expect(renumber).toHaveLength(2)
+    expect(applyRenumber(final, renumber)).toBe('1. fir\n2. st\n3. second\n4. third')
+  })
+
+  it('renumbers across drifted numbers and rides over nested items', () => {
+    const draft = '1. first\n  1. nested\n4. second'
+    const caret = '1. fir'.length
+    const { final, renumber } = continueAfterBreak(draft, caret)
+    expect(final).toBe('1. fir\n2. st\n  1. nested\n4. second')
+    expect(applyRenumber(final, renumber)).toBe('1. fir\n2. st\n  1. nested\n3. second')
+  })
+
+  it('produces no renumber when the continued item is the last one', () => {
+    const { renumber } = continueAfterBreak('1. a\n2. b', '1. a\n2. b'.length)
+    expect(renumber).toEqual([])
+  })
+
+  it('splits a mid-line item, keeping the suffix on the new line', () => {
+    expect(continueAfterBreak('- item', '- it'.length).final).toBe('- it\n- em')
+  })
+
+  it('exits the structure on an emptied item by removing its prefix', () => {
+    expect(continueAfterBreak('- ', 2).final).toBe('\n')
+    expect(continueAfterBreak('- [ ] ', 6).final).toBe('\n')
+    expect(continueAfterBreak('1. ', 3).final).toBe('\n')
+  })
+
+  it('keeps the indentation when exiting a quote line', () => {
+    expect(continueAfterBreak('  > ', 4).final).toBe('  \n')
+  })
+
+  it('arms nothing at the line start of an empty item (the bare break already exits)', () => {
+    expect(arm('- ', 0)).toBeUndefined()
+  })
+
+  it('arms nothing on ordinary text, inside fences, or over a chip interior', () => {
+    expect(arm('plain line', 5)).toBeUndefined()
+    expect(arm('```\ncode\n```', 5)).toBeUndefined()
+    expect(arm('- item', 3, { nativeRanges: [{ start: 2, end: 5, kind: 'reference' }] })).toBeUndefined()
+  })
+
+  it('arms nothing on a non-collapsed selection', () => {
+    expect(arm('- item', { start: 2, end: 5 })).toBeUndefined()
+  })
+
+  it('drops the intent when the landed draft differs from the bare break', () => {
+    const armed = arm('- item', 6)
+    expect(armed).toBeDefined()
+    expect(settleBreakContinuation(armed!, '- item\nx')).toBeUndefined()
+    expect(settleBreakContinuation(armed!, '- item')).toBeUndefined()
+  })
+
+  it('yields only newline-free follow-up edits the insertText seam can express', () => {
+    for (const draft of ['- a', '1. a', '- [ ] a', '> a', '- ']) {
+      const { edit } = continueAfterBreak(draft, draft.length)
+      expect(edit).toBeDefined()
+      expect(edit!.text).not.toContain('\n')
+    }
   })
 })

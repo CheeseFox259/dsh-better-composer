@@ -3,12 +3,27 @@
  *
  * Direct port of the canonical DSH harness `composer-structural-editing.ts`
  * (MIT, (c) DeepSeek), with protected-range remapping inlined from
- * `composer-edit.ts`. The pure command utility can calculate Shift+Enter and
+ * `composer-edit.ts`. The pure command utility calculates Shift+Enter and
  * Enter continuation edits for callers with a paragraph-break seam; the
- * plugin keymap currently admits only Tab/Shift+Tab because official
- * InputActions cannot create a paragraph while preserving the caret. All
- * admitted edits go through the revision-guarded transaction bridge; anything
- * unsafe passes back to the native composer path untouched.
+ * plugin keymap admits Tab/Shift+Tab through it directly.
+ *
+ * Line-break continuation cannot use that atomic path: the official
+ * InputActions seam cannot create a paragraph while preserving the caret
+ * (`insertText` splices raw text, `setDraft` strips reference chips and
+ * forces the caret to the end). The plugin therefore splits continuation
+ * into a post-hoc pair: `armBreakContinuation` runs at keydown (before the
+ * host's native break) and records the intent; `settleBreakContinuation`
+ * runs once the break lands in the draft and yields a newline-free
+ * follow-up edit (insert the prefix, or delete the prefix of an emptied
+ * item) that the insertText seam CAN express. All admitted edits go through
+ * the revision-guarded transaction bridge; anything unsafe passes back to
+ * the native composer path untouched.
+ *
+ * Known deviations from the atomic path: an emptied item exits the list on
+ * Shift+Enter, where the atomic path passes Shift+Enter through; and the
+ * ordered-run renumber trails the prefix insert as a chain of within-line
+ * digit edits (one undo step each), because one atomic rewrite would span
+ * newlines the seam cannot express.
  */
 
 import type { ComposerEditResult, ComposerNativeRange } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -110,6 +125,158 @@ export function runComposerStructuralCommand(
 type EditDecision = { readonly kind: 'edit'; readonly value: ComposerEditResult }
   | { readonly kind: 'pass' }
   | { readonly kind: 'noop'; readonly reason: string }
+
+/**
+ * List/quote continuation intent recorded at Shift+Enter keydown, before
+ * the host's native line break lands in the draft.
+ */
+export interface ArmedBreakContinuation {
+  /** Draft text the intent was computed against. */
+  readonly draft: string
+  /** Collapsed caret the intent was computed against. */
+  readonly caret: number
+  /** The newline-free follow-up edit the break makes applicable. */
+  readonly followUp:
+    | {
+      readonly kind: 'insert-prefix'
+      readonly prefix: string
+      /** Present for ordered items: the new item's own number context. */
+      readonly ordered?: { readonly indentation: string; readonly delimiter: string; readonly number: number }
+    }
+    | { readonly kind: 'remove-prefix'; readonly start: number; readonly end: number }
+}
+
+/** One within-line digit rewrite, in post-insert draft coordinates. */
+export interface OrderedRenumberEdit {
+  readonly start: number
+  readonly end: number
+  readonly text: string
+  /** The digits expected at [start, end); a mismatch means the draft moved on. */
+  readonly expect: string
+}
+
+/** The follow-up edit plus any ordered-run renumber trailing it. */
+export interface SettledBreakContinuation {
+  readonly edit: ComposerEditResult
+  /**
+   * Sibling renumber edits for an ordered continuation, in REVERSE document
+   * order so digit-length changes never shift a pending edit's coordinates.
+   * Each is newline-free and must be applied against `baseDraft` evolved by
+   * the previously applied edits.
+   */
+  readonly renumber: readonly OrderedRenumberEdit[]
+  /** The draft after `edit` is applied; the renumber edits' coordinate base. */
+  readonly baseDraft: string
+}
+
+/**
+ * Arm a list/quote continuation for one Shift+Enter. Returns undefined when
+ * the caret is not on a continuable line (ordinary text, fenced code,
+ * non-collapsed selection, chip interior), leaving the native break bare.
+ */
+export function armBreakContinuation(
+  draft: string,
+  selection: { readonly start: number; readonly end: number },
+  nativeRanges: readonly ComposerNativeRange[],
+): ArmedBreakContinuation | undefined {
+  if (!validSelection(draft, selection) || selection.start !== selection.end) return undefined
+  if (crossesNativeRange(nativeRanges, selection)) return undefined
+  if (isInsideFence(draft, selection.start)) return undefined
+  const line = lineAt(draft, selection.start)
+  if (line === undefined) return undefined
+  const continuation = continuationForLine(line.text)
+  if (continuation.kind === 'ordinary') return undefined
+  const caret = selection.start
+  if (continuation.empty) {
+    // A caret at the very line start needs no follow-up: the native break
+    // alone pushes the empty item down, leaving the desired plain line.
+    if (caret === line.start) return undefined
+    // Exiting the structure drops the marker of the emptied item; a quote
+    // line keeps its indentation, a list item drops it (canonical parity).
+    const start = continuation.kind === 'blockquote'
+      ? line.start + line.text.length - line.text.trimStart().length
+      : line.start
+    return { draft, caret, followUp: { kind: 'remove-prefix', start, end: caret } }
+  }
+  return {
+    draft,
+    caret,
+    followUp: {
+      kind: 'insert-prefix',
+      prefix: continuation.prefix,
+      ...(continuation.kind === 'ordered'
+        ? { ordered: { indentation: continuation.indentation, delimiter: continuation.delimiter, number: continuation.number } }
+        : {}),
+    },
+  }
+}
+
+/**
+ * Settle an armed continuation against the draft observed after the native
+ * break. The draft must differ by exactly one `\n` at the armed caret — any
+ * other shape means the break did not land as expected (or something else
+ * edited first) and the intent is dropped. The returned edit contains no
+ * newline, so the official insertText seam can express it.
+ */
+export function settleBreakContinuation(
+  armed: ArmedBreakContinuation,
+  nextDraft: string,
+): SettledBreakContinuation | undefined {
+  const expected = armed.draft.slice(0, armed.caret) + '\n' + armed.draft.slice(armed.caret)
+  if (nextDraft !== expected) return undefined
+  const { followUp } = armed
+  if (followUp.kind === 'insert-prefix') {
+    const at = armed.caret + 1
+    const edit: ComposerEditResult = { start: at, end: at, text: followUp.prefix, selectionStart: at + followUp.prefix.length, selectionEnd: at + followUp.prefix.length }
+    const baseDraft = expected.slice(0, at) + followUp.prefix + expected.slice(at)
+    return {
+      edit,
+      renumber: followUp.ordered === undefined ? [] : orderedRunRenumber(baseDraft, at, followUp.ordered),
+      baseDraft,
+    }
+  }
+  return {
+    edit: { start: followUp.start, end: followUp.end, text: '', selectionStart: followUp.start, selectionEnd: followUp.start },
+    renumber: [],
+    baseDraft: expected.slice(0, followUp.start) + expected.slice(followUp.end),
+  }
+}
+
+const MAX_RENUMBER_EDITS = 200
+
+/**
+ * Digit rewrites that renumber the ordered run following a freshly continued
+ * item. Returned in reverse document order; digit-length changes then never
+ * shift a pending edit. Siblings are same-depth same-delimiter ordered lines;
+ * deeper lines ride along untouched, anything else ends the run.
+ */
+function orderedRunRenumber(
+  postInsert: string,
+  newItemLineStart: number,
+  ordered: { readonly indentation: string; readonly delimiter: string; readonly number: number },
+): readonly OrderedRenumberEdit[] {
+  const lines = sourceLines(postInsert)
+  const newItemIndex = lines.findIndex(line => line.start === newItemLineStart)
+  if (newItemIndex < 0) return []
+  const edits: OrderedRenumberEdit[] = []
+  let expectedNumber = ordered.number + 2
+  for (const line of lines.slice(newItemIndex + 1)) {
+    const item = continuationForLine(line.text)
+    if (item.kind === 'ordered' && item.indentation === ordered.indentation && item.delimiter === ordered.delimiter) {
+      const oldDigits = /^ *\d+/u.exec(line.text)?.[0].trim() ?? ''
+      const digitStart = line.start + item.indentation.length
+      if (oldDigits !== String(expectedNumber)) {
+        edits.push({ start: digitStart, end: digitStart + oldDigits.length, text: String(expectedNumber), expect: oldDigits })
+      }
+      expectedNumber += 1
+      if (edits.length >= MAX_RENUMBER_EDITS) break
+      continue
+    }
+    if (leadingWhitespace(line.text).length > ordered.indentation.length && line.text.trim() !== '') continue
+    break
+  }
+  return edits.reverse()
+}
 
 function lineBreakEdit(
   source: string,

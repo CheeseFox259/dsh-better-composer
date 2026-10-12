@@ -60,7 +60,7 @@ export class BetterComposerSettingsStore {
 function sameSettings(left: BetterComposerSettings, right: BetterComposerSettings): boolean {
   return left.enabled === right.enabled
     && left.markdownVisual === right.markdownVisual
-    && left.diagnostics === right.diagnostics
+    && left.inactiveMarkerDisplay === right.inactiveMarkerDisplay
     && left.toolbarMode === right.toolbarMode
     && left.pasteClipThreshold === right.pasteClipThreshold
 }

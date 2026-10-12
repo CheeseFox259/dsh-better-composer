@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { createPortal } from 'react-dom'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {
-  ComposerDecorationContext, ComposerEditResult, ComposerNativeRange,
+  ComposerEditResult, ComposerNativeRange,
   ComposerSurfaceExtensionPresentation, ComposerTextSegment,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InputActions, InputState } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -10,22 +10,18 @@ import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-store'
 import { writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SlotComponent } from '@deepseek-ai/dsh-client-ui-slots'
 import type { BetterComposerSettingsStore } from './settings-store.ts'
-import { createDecorationProvider } from './decoration-provider.ts'
-import { createComposerVisualController } from './visual-controller.ts'
-import { convertCapturedPasteToClip, type ClipSessionInput } from './clip-convert.ts'
-import { installPasteInterceptor } from './paste-interceptor.ts'
-import type { ClipStore } from './clip-store.ts'
+import { PasteClipController, type ClipSessionInput } from './clip-controller.ts'
 import { createMarkdownSurfaceExtension } from './surface-extension.ts'
 import { applyComposerEdit } from './edit-apply.ts'
 import { installComposerKeymap } from './keys.ts'
-import { subscribeGrammarLoaded } from '../markdown/primitives.ts'
 import { useComposerPresentation } from './selection.ts'
-import { getClipToast, subscribeClipToast } from './clip-toast.ts'
+import { settleBreakContinuation, type ArmedBreakContinuation, type OrderedRenumberEdit } from '../markdown/structural-editing.ts'
 import {
-  codeCopyBlockAnchors, codeCopyBlocksForSegments, codeFenceLanguageEdit, tableLayoutsForSegments,
-  tableRowAnchors, type MarkdownCodeCopyAnchor, type MarkdownCodeCopyBlock, type MarkdownTableLayout,
-  type MarkdownTableRow,
-} from './presentation-layout.ts'
+  codeFenceLanguageEdit, install, project, subscribeGrammarReload,
+  type CodeBlockOverlay, type DecorationInstallation, type InstallationResult,
+  type ListMarkerOverlay, type MeasuredRect,
+  type TableOverlay,
+} from '../decoration/index.ts'
 
 const useSafeLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
@@ -151,25 +147,24 @@ function textSegmentsFor(draft: string, nativeRanges: readonly ComposerNativeRan
 
 /**
  * Build the session-scoped `conversation.input.overlay` contribution. The
- * returned component derives the whole decoration context from the official
- * input state, tracks presentation from DOM signals, self-paints Markdown
- * highlights, consumes its own keys in the capture phase, and converts long
- * pastes into clips.
+ * returned component derives the decoration projection from the draft and
+ * selection, holds an installation on the editor root, consumes its own keys
+ * in the capture phase, and converts long pastes into clips.
  */
 export function createEditorContribution(
   ctx: ClientContext,
   settings: BetterComposerSettingsStore,
-  clips: ClipStore,
+  controller: PasteClipController,
 ): SlotComponent<BetterComposerOverlayProps> {
   return function EditorContribution(props: BetterComposerOverlayProps) {
-    return <EditorOverlay {...props} ctx={ctx} settings={settings} clips={clips} />
+    return <EditorOverlay {...props} ctx={ctx} settings={settings} controller={controller} />
   }
 }
 
-function EditorOverlay({ sessionId, useInput, inputActions, ctx, settings, clips }: BetterComposerOverlayProps & {
+function EditorOverlay({ sessionId, useInput, inputActions, ctx, settings, controller }: BetterComposerOverlayProps & {
   readonly ctx: ClientContext
   readonly settings: BetterComposerSettingsStore
-  readonly clips: ClipStore
+  readonly controller: PasteClipController
 }) {
   const current = useSyncExternalStore(
     listener => settings.subscribe(listener),
@@ -213,21 +208,16 @@ function EditorOverlay({ sessionId, useInput, inputActions, ctx, settings, clips
   const extension = useMemo(() => createMarkdownSurfaceExtension(settings), [settings])
   const surfacePresentation = current.enabled ? extension.present(surfaceContext) : undefined
 
-  const provider = useMemo(() => createDecorationProvider(() => settings.get()), [settings])
-
   const apply = useCallback((edit: ComposerEditResult, draftRev: number): boolean =>
     applyComposerEdit(inputActions, inputState.occurrences, edit, draftRev),
   [inputActions, inputState.occurrences])
 
-  // Paste capture runs before Core's default insertion. Long pastes become a
-  // real reference chip while the captured revision/span is still current;
-  // ordinary multiline text uses Core's public setDraft seam to rebuild one
-  // paragraph per line.
+  // Paste capture runs before Core's default insertion.
   useEffect(() => {
     if (!current.enabled || input === null || sessionInput === undefined) return () => {}
-    return installPasteInterceptor({
-      input,
-      actions: inputActions,
+    return controller.attach(input, inputActions, {
+      sessionId: String(sessionId),
+      sessionInput,
       readState: () => ({
         draft: inputState.draft,
         occurrences: inputState.occurrences.length,
@@ -235,52 +225,75 @@ function EditorOverlay({ sessionId, useInput, inputActions, ctx, settings, clips
         composing: presentation.composing === true,
         threshold: current.pasteClipThreshold,
       }),
-      onClip: (text, span) => convertCapturedPasteToClip(
-        ctx,
-        clips,
-        String(sessionId),
-        text,
-        span,
-        sessionInput,
-      ),
     })
-  }, [ctx, clips, sessionId, sessionInput, input, inputActions, inputState.draft, inputState.occurrences.length, inputState.phase, presentation.composing, current.enabled, current.pasteClipThreshold])
+  }, [controller, sessionId, sessionInput, input, inputActions, inputState.draft, inputState.occurrences.length, inputState.phase, presentation.composing, current.enabled, current.pasteClipThreshold])
 
-  // Self-paint: compute text and block decoration segments and install them
-  // onto the editor root and direct Lexical blocks.
+  // Track grammar reloads for live Shiki token projection.
   const [grammarTick, setGrammarTick] = useState(0)
-  useEffect(() => subscribeGrammarLoaded(() => { setGrammarTick(tick => tick + 1) }), [])
-  const decorationContext = useMemo<ComposerDecorationContext>(() => ({
-    sessionId: String(sessionId) as ComposerDecorationContext['sessionId'],
-    draft: inputState.draft,
-    draftRev: inputState.draftRev,
-    nativeRanges,
-    textSegments,
-    presentation,
-  }), [sessionId, inputState.draft, inputState.draftRev, nativeRanges, textSegments, presentation])
+  useEffect(() => subscribeGrammarReload(() => { setGrammarTick(tick => tick + 1) }), [])
 
-  const visualControllerRef = useRef<ReturnType<typeof createComposerVisualController> | null>(null)
+  const selection = useMemo(() => ({
+    start: presentation.selectionStart,
+    end: presentation.selectionEnd,
+    focused: presentation.focused,
+    composing: presentation.composing === true,
+  }), [presentation.selectionStart, presentation.selectionEnd, presentation.focused, presentation.composing])
+
+  const plan = useMemo(
+    () => current.enabled
+      ? project(inputState.draft, selection, nativeRanges, {
+        markdownVisual: current.markdownVisual,
+      })
+      : undefined,
+    [current.enabled, inputState.draft, selection, nativeRanges, current.markdownVisual, grammarTick],
+  )
+
+  const installationRef = useRef<DecorationInstallation | null>(null)
+  const [installationResult, setInstallationResult] = useState<InstallationResult>({
+    synchronized: false,
+    tableRowElements: new Map(),
+    codeBlockElements: new Map(),
+    listMarkers: [],
+  })
+  const measureRange = useCallback((start: number, end: number): MeasuredRect | null =>
+    installationRef.current?.measureRange(start, end) ?? null, [])
+
   useSafeLayoutEffect(() => {
     if (input === null || !current.enabled) {
-      visualControllerRef.current?.dispose()
-      visualControllerRef.current = null
+      installationRef.current?.dispose()
+      installationRef.current = null
+      setInstallationResult({ synchronized: false, tableRowElements: new Map(), codeBlockElements: new Map(), listMarkers: [] })
       return () => {}
     }
-    const controller = createComposerVisualController(input)
-    visualControllerRef.current = controller
+    const installation = install(input, result => {
+      setInstallationResult(result)
+    })
+    installationRef.current = installation
     return () => {
-      if (visualControllerRef.current === controller) visualControllerRef.current = null
-      controller.dispose()
+      if (installationRef.current === installation) installationRef.current = null
+      installation.dispose()
     }
   }, [input, current.enabled])
 
   useSafeLayoutEffect(() => {
-    const controller = visualControllerRef.current
-    if (controller === null || !current.enabled) return
-    controller.update(provider, decorationContext)
-  }, [provider, decorationContext, current.enabled, current.markdownVisual, current.diagnostics, grammarTick])
+    const installation = installationRef.current
+    if (installation === null || plan === undefined) return
+    const result = installation.update(plan)
+    setInstallationResult(result)
+  }, [plan])
+
+  // Inactive source markers are transparent by default; the fade mode keeps
+  // them visible in a muted color so users can see the syntax they typed.
+  useEffect(() => {
+    if (input === null || !current.enabled) return () => {}
+    input.setAttribute('data-better-composer-inactive-markers', current.inactiveMarkerDisplay)
+    return () => { input.removeAttribute('data-better-composer-inactive-markers') }
+  }, [input, current.enabled, current.inactiveMarkerDisplay])
 
   // Capture only completion and list-structure keys; formatting shortcuts stay with Core.
+  // Shift+Enter is not consumed: the keymap arms a continuation intent that the
+  // settle effect below applies once the host's native break lands in the draft.
+  const pendingBreakRef = useRef<ArmedBreakContinuation | null>(null)
   useEffect(() => {
     if (input === null) return () => {}
     return installComposerKeymap({
@@ -289,23 +302,64 @@ function EditorOverlay({ sessionId, useInput, inputActions, ctx, settings, clips
       presentation: () => surfacePresentation,
       extension,
       apply,
+      noteBreakContinuation: armed => {
+        pendingBreakRef.current = armed ?? null
+      },
       isEnabled: () => settings.get().enabled,
     })
   }, [input, surfaceContext, surfacePresentation, extension, apply, settings])
 
-  // Toast feedback: auto-dismisses after 4 seconds.
-  const toastMessage = useSyncExternalStore(subscribeClipToast, getClipToast, () => null)
+  // Settle one armed Shift+Enter continuation against the draft the host's
+  // native break produced. The follow-up edit (insert or remove the list
+  // prefix) contains no newline, so the revision-guarded insertText seam can
+  // express it; a draft that differs by anything but the break drops the
+  // intent untouched.
+  const renumberQueueRef = useRef<{ readonly armedRev: number; readonly baseDraft: string; readonly edits: readonly OrderedRenumberEdit[] } | null>(null)
+  useEffect(() => {
+    const armed = pendingBreakRef.current
+    if (armed === null) return
+    pendingBreakRef.current = null
+    renumberQueueRef.current = null
+    if (!current.enabled) return
+    const settled = settleBreakContinuation(armed, inputState.draft)
+    if (settled === undefined) return
+    if (!apply(settled.edit, inputState.draftRev)) return
+    if (settled.renumber.length > 0) {
+      renumberQueueRef.current = { armedRev: inputState.draftRev, baseDraft: settled.baseDraft, edits: settled.renumber }
+    }
+  }, [inputState.draft, inputState.draftRev, current.enabled, apply])
 
-  // Floating presentation layers (table grid, code controls) derived from the
-  // same authoritative segments; they mount only when Markdown paint is on.
-  const tableLayouts = useMemo(
-    () => current.enabled && current.markdownVisual ? tableLayoutsForSegments(textSegments) : [],
-    [current.enabled, current.markdownVisual, textSegments],
-  )
-  const codeBlocks = useMemo(
-    () => current.enabled && current.markdownVisual ? codeCopyBlocksForSegments(textSegments) : [],
-    [current.enabled, current.markdownVisual, textSegments],
-  )
+  // Drain the ordered-run renumber one within-line digit edit per draft
+  // revision. Each step is verified against its expected digits and the
+  // evolving base draft; any outside edit abandons the rest of the chain.
+  useEffect(() => {
+    const queue = renumberQueueRef.current
+    if (queue === null || queue.edits.length === 0) return
+    if (inputState.draft !== queue.baseDraft) {
+      // The settle effect's own prefix insert has not landed yet; wait one
+      // revision. Anything later means outside interference.
+      if (inputState.draftRev > queue.armedRev + 1) renumberQueueRef.current = null
+      return
+    }
+    const next = queue.edits[0]!
+    if (inputState.draft.slice(next.start, next.end) !== next.expect) {
+      renumberQueueRef.current = null
+      return
+    }
+    const caret = next.start + next.text.length
+    if (!apply({ start: next.start, end: next.end, text: next.text, selectionStart: caret, selectionEnd: caret }, inputState.draftRev)) {
+      renumberQueueRef.current = null
+      return
+    }
+    renumberQueueRef.current = {
+      armedRev: queue.armedRev,
+      baseDraft: inputState.draft.slice(0, next.start) + next.text + inputState.draft.slice(next.end),
+      edits: queue.edits.slice(1),
+    }
+  }, [inputState.draft, inputState.draftRev, apply])
+
+  // Toast feedback: auto-dismisses after 4 seconds.
+  const toastMessage = useSyncExternalStore(controller.subscribeToast, controller.getToast, () => null)
 
   if (!current.enabled) return null
   return <EditorSurface
@@ -313,18 +367,20 @@ function EditorOverlay({ sessionId, useInput, inputActions, ctx, settings, clips
     toastMessage={toastMessage}
     setLayerRef={setLayerRef}
     input={input}
-    context={decorationContext}
+    draftRev={inputState.draftRev}
     apply={apply}
-    tableLayouts={tableLayouts}
-    codeBlocks={codeBlocks}
+    tables={plan?.overlays.tables ?? []}
+    codeBlocks={plan?.overlays.codeBlocks ?? []}
+    listMarkers={installationResult.listMarkers}
+    measureRange={measureRange}
+    tableRowElements={installationResult.tableRowElements}
+    codeBlockElements={installationResult.codeBlockElements}
   />
 }
 
 /**
  * Live caret position in frame content coordinates, measured from the DOM
- * selection. Because the frame rides inside the scrolling content, these
- * coordinates stay valid while the scrollport scrolls; re-measure on
- * selection change, resize, and frame geometry change.
+ * selection.
  */
 function useCaretAnchor(
   frame: HTMLElement | null,
@@ -337,11 +393,11 @@ function useCaretAnchor(
       return () => {}
     }
     const measure = (): void => {
-      const selection = document.getSelection()
-      if (selection === null || selection.rangeCount === 0) return
-      let rect = selection.getRangeAt(0).getBoundingClientRect()
+      const domSelection = document.getSelection()
+      if (domSelection === null || domSelection.rangeCount === 0) return
+      let rect = domSelection.getRangeAt(0).getBoundingClientRect()
       if (rect.height === 0 && rect.width === 0) {
-        const anchor = selection.anchorNode
+        const anchor = domSelection.anchorNode
         const element = anchor instanceof HTMLElement ? anchor : anchor?.parentElement
         if (element === null || element === undefined) return
         rect = element.getBoundingClientRect()
@@ -371,8 +427,6 @@ function useCaretAnchor(
 
 /**
  * Completion presentation anchored at the caret inside the scrolling content.
- * The popup opens below the caret line and flips above it when the scrollport
- * would clip it; the ghost rides inline at the caret.
  */
 function CompletionLayer({
   frame, popup, ghost, activeOptionId,
@@ -430,9 +484,8 @@ export function CompletionPopup({
     <ul
       className="dsh-better-composer-completion-popup"
       role="listbox"
-      aria-label="Markdown completion"
+      aria-label="Markdown 补全候选项"
       aria-activedescendant={activeOptionId}
-      tabIndex={-1}
       data-better-composer-completion-popup
       data-revision={popup.revision}
       style={{ top, left }}
@@ -470,19 +523,23 @@ export function CompletionGhost({
 }
 
 export function EditorSurface({
-  surfacePresentation, toastMessage, setLayerRef, input, context, apply, tableLayouts, codeBlocks,
+  surfacePresentation, toastMessage, setLayerRef, input, draftRev, apply,
+  tables, codeBlocks, listMarkers, measureRange, tableRowElements, codeBlockElements,
 }: {
   readonly surfacePresentation: ComposerSurfaceExtensionPresentation | undefined
   readonly toastMessage: string | null
   readonly setLayerRef: (element: HTMLDivElement | null) => void
   readonly input: HTMLElement | null
-  readonly context: ComposerDecorationContext
+  readonly draftRev: number
   readonly apply: (edit: ComposerEditResult, draftRev: number) => boolean
-  readonly tableLayouts: readonly MarkdownTableLayout[]
-  readonly codeBlocks: readonly MarkdownCodeCopyBlock[]
+  readonly tables: readonly TableOverlay[]
+  readonly codeBlocks: readonly CodeBlockOverlay[]
+  readonly listMarkers: readonly ListMarkerOverlay[]
+  readonly measureRange: (start: number, end: number) => MeasuredRect | null
+  readonly tableRowElements: ReadonlyMap<number, HTMLElement>
+  readonly codeBlockElements: ReadonlyMap<number, HTMLElement>
 }) {
   const frame = useComposerFrame(input)
-  const diagnostics = surfacePresentation?.diagnostics ?? []
   const popup = surfacePresentation?.popup
   const ghost = surfacePresentation?.ghost
   const hints = surfacePresentation?.hints ?? []
@@ -497,15 +554,6 @@ export function EditorSurface({
           {toastMessage}
         </div>
       ) : null}
-      {diagnostics.length > 0 ? (
-        <ul className="dsh-better-composer-diagnostics" role="status" aria-live="polite" aria-atomic="false" aria-label="Markdown 诊断">
-          {diagnostics.map((diagnostic, index) => (
-            <li key={`${diagnostic.className}-${diagnostic.start}-${index}`} data-diagnostic-start={diagnostic.start} data-diagnostic-end={diagnostic.end}>
-              {diagnostic.message}
-            </li>
-          ))}
-        </ul>
-      ) : null}
       {hints.length > 0 ? (
         <ul className="dsh-better-composer-hints" aria-label="编辑器提示" data-better-composer-hints>
           {hints.map((hint, index) => (
@@ -515,11 +563,12 @@ export function EditorSurface({
           ))}
         </ul>
       ) : null}
-      {frame !== null && input !== null && (tableLayouts.length > 0 || codeBlocks.length > 0)
+      {frame !== null && input !== null && (tables.length > 0 || codeBlocks.length > 0 || listMarkers.length > 0)
         ? createPortal(
           <div className="dsh-better-composer-visual-layer" data-better-composer-visual-layer aria-hidden={codeBlocks.length === 0}>
-            {tableLayouts.length > 0 ? <TableVisualRows frame={frame} input={input} context={context} layouts={tableLayouts} /> : null}
-            {codeBlocks.length > 0 ? <CodeBlockControls frame={frame} input={input} context={context} blocks={codeBlocks} apply={apply} /> : null}
+            {tables.length > 0 ? <TableVisualRows frame={frame} tables={tables} tableRowElements={tableRowElements} /> : null}
+            {listMarkers.length > 0 ? <ListMarkerGlyphs frame={frame} markers={listMarkers} measureRange={measureRange} /> : null}
+            {codeBlocks.length > 0 ? <CodeBlockControls frame={frame} input={input} draftRev={draftRev} blocks={codeBlocks} codeBlockElements={codeBlockElements} apply={apply} /> : null}
           </div>,
           frame,
         )
@@ -540,7 +589,10 @@ function completionOptionId(revision: number, index: number): string {
 
 interface TableRowPosition {
   readonly layoutStart: number
-  readonly row: MarkdownTableRow
+  readonly rowStart: number
+  readonly cells: readonly string[]
+  readonly header: boolean
+  readonly last: boolean
   readonly top: number
   readonly left: number
   readonly width: number
@@ -551,16 +603,14 @@ interface TableRowPosition {
 
 /**
  * Presentation-only table grid. Rows are cloned geometry over the Core-owned
- * source lines inside the input's scrolling content. The scrollport clips
- * rows without a scroll-event re-measure.
+ * source lines inside the input's scrolling content.
  */
 function TableVisualRows({
-  frame, input, context, layouts,
+  frame, tables, tableRowElements,
 }: {
   readonly frame: HTMLElement
-  readonly input: HTMLElement
-  readonly context: ComposerDecorationContext
-  readonly layouts: readonly MarkdownTableLayout[]
+  readonly tables: readonly TableOverlay[]
+  readonly tableRowElements: ReadonlyMap<number, HTMLElement>
 }) {
   const layerRef = useRef<HTMLDivElement | null>(null)
   const [positions, setPositions] = useState<readonly TableRowPosition[]>([])
@@ -568,57 +618,54 @@ function TableVisualRows({
   useSafeLayoutEffect(() => {
     if (layerRef.current === null) return () => {}
     const measure = (): void => {
-      const inactiveLayouts = layouts.filter(layout => !tableIsActive(context, layout))
-      const anchors = tableRowAnchors(input, context.draft, context.nativeRanges, inactiveLayouts)
-      if (anchors === undefined) return
-      if (anchors.length === 0) {
-        setPositions(previous => previous.length === 0 ? previous : [])
-        return
-      }
+      const inactiveTables = tables.filter(table => !table.active)
       const frameRect = frame.getBoundingClientRect()
-      const next = anchors.flatMap(anchor => {
-        const rect = anchor.element.getBoundingClientRect()
-        if (rect.width === 0 && rect.height === 0) return []
-        const layout = inactiveLayouts.find(candidate => candidate.start === anchor.layoutStart)
-        if (layout === undefined) return []
-        return [{
-          layoutStart: anchor.layoutStart,
-          row: anchor.row,
-          top: rect.top - frameRect.top,
-          left: rect.left - frameRect.left,
-          width: rect.width,
-          height: rect.height,
-          columns: layout.columnWidths.map(width => `minmax(0, ${width}fr)`).join(' '),
-          columnCount: layout.columnWidths.length,
-        }]
-      })
+      const next: TableRowPosition[] = []
+      for (const table of inactiveTables) {
+        for (const row of table.rows) {
+          const element = tableRowElements.get(row.lineIndex)
+          if (element === undefined) continue
+          const rect = element.getBoundingClientRect()
+          if (rect.width === 0 && rect.height === 0) continue
+          next.push({
+            layoutStart: table.start,
+            rowStart: row.start,
+            cells: row.cells,
+            header: row.header,
+            last: row.last,
+            top: rect.top - frameRect.top,
+            left: rect.left - frameRect.left,
+            width: rect.width,
+            height: rect.height,
+            columns: table.columnWidths.map(width => `minmax(0, ${width}fr)`).join(' '),
+            columnCount: table.columnWidths.length,
+          })
+        }
+      }
       setPositions(previous => samePositions(previous, next, position =>
-        `${position.row.start}:${position.top}:${position.left}:${position.width}:${position.height}:${position.columns}`) ? previous : next)
+        `${position.rowStart}:${position.top}:${position.left}:${position.width}:${position.height}:${position.columns}`) ? previous : next)
     }
     measure()
     const { schedule, cancel } = rafSchedule(measure)
-    // The structural table-row classes land in the parent's layout effect,
-    // after this child effect; re-measure once per frame to catch them.
     schedule()
     window.addEventListener('resize', schedule)
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(schedule)
-    observer?.observe(input)
     observer?.observe(frame)
     return () => {
       cancel()
       window.removeEventListener('resize', schedule)
       observer?.disconnect()
     }
-  }, [frame, input, context, layouts])
+  }, [frame, tables, tableRowElements])
 
   return <div ref={layerRef}>
     {positions.map(position => {
-      const cells = Array.from({ length: position.columnCount }, (_, index) => position.row.cells[index] ?? '')
+      const cells = Array.from({ length: position.columnCount }, (_, index) => position.cells[index] ?? '')
       return <div
-        key={`${position.layoutStart}-${position.row.start}`}
+        key={`${position.layoutStart}-${position.rowStart}`}
         className="dsh-better-composer-table-visual-row"
-        data-header={position.row.header ? 'true' : undefined}
-        data-last={position.row.last ? 'true' : undefined}
+        data-header={position.header ? 'true' : undefined}
+        data-last={position.last ? 'true' : undefined}
         style={{
           top: position.top,
           left: position.left,
@@ -633,12 +680,88 @@ function TableVisualRows({
   </div>
 }
 
-function tableIsActive(context: ComposerDecorationContext, layout: MarkdownTableLayout): boolean {
-  const presentation = context.presentation
-  if (presentation?.focused !== true) return false
-  const { selectionStart, selectionEnd } = presentation
-  if (selectionStart === selectionEnd) return layout.start <= selectionStart && selectionStart < layout.end
-  return selectionStart < layout.end && layout.start < selectionEnd
+const BULLET_GLYPHS = ['•', '◦', '▪', '–', '⁃', '‣'] as const
+
+/** The glyph one list marker overlay entry paints, mirroring the retired ::before table. */
+export function listMarkerGlyph(marker: Pick<ListMarkerOverlay, 'kind' | 'checked' | 'depth'>): string {
+  if (marker.kind === 'task') return marker.checked ? '☑' : '☐'
+  return BULLET_GLYPHS[Math.min(6, Math.max(1, marker.depth)) - 1] ?? '•'
+}
+
+interface ListGlyphPosition {
+  readonly key: string
+  readonly top: number
+  readonly left: number
+  readonly height: number
+  readonly glyph: string
+  readonly kind: 'bullet' | 'task'
+  readonly checked: boolean
+  readonly depth: number
+}
+
+/**
+ * Per-line bullet/checkbox glyphs over the Core-owned source lines. List
+ * glyphs are line-scoped (a DOM block may hold several draft lines), so they
+ * measure the hidden marker range itself instead of relying on a block-level
+ * pseudo-element that can only exist once per block.
+ */
+function ListMarkerGlyphs({
+  frame, markers, measureRange,
+}: {
+  readonly frame: HTMLElement
+  readonly markers: readonly ListMarkerOverlay[]
+  readonly measureRange: (start: number, end: number) => MeasuredRect | null
+}) {
+  const [positions, setPositions] = useState<readonly ListGlyphPosition[]>([])
+
+  useSafeLayoutEffect(() => {
+    const measure = (): void => {
+      const frameRect = frame.getBoundingClientRect()
+      const next: ListGlyphPosition[] = []
+      for (const marker of markers) {
+        const rect = measureRange(marker.markerStart, marker.markerEnd)
+        if (rect === null || (rect.width === 0 && rect.height === 0)) continue
+        next.push({
+          key: `${marker.markerStart}:${marker.kind}:${marker.checked}`,
+          top: rect.top - frameRect.top,
+          left: rect.right - frameRect.left,
+          height: rect.height,
+          glyph: listMarkerGlyph(marker),
+          kind: marker.kind,
+          checked: marker.checked,
+          depth: marker.depth,
+        })
+      }
+      setPositions(previous => samePositions(previous, next, position =>
+        `${position.key}:${position.top}:${position.left}:${position.height}`) ? previous : next)
+    }
+    measure()
+    const { schedule, cancel } = rafSchedule(measure)
+    schedule()
+    window.addEventListener('resize', schedule)
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(schedule)
+    observer?.observe(frame)
+    return () => {
+      cancel()
+      window.removeEventListener('resize', schedule)
+      observer?.disconnect()
+    }
+  }, [frame, markers, measureRange])
+
+  return <div data-better-composer-list-markers>
+    {positions.map(position => (
+      <span
+        key={position.key}
+        className="dsh-better-composer-list-marker-glyph"
+        data-kind={position.kind}
+        data-checked={position.checked ? 'true' : undefined}
+        data-depth={position.depth}
+        style={{ top: position.top, left: position.left, lineHeight: `${position.height}px` }}
+      >
+        {position.glyph}
+      </span>
+    ))}
+  </div>
 }
 
 const CODE_LANGUAGES = [
@@ -662,21 +785,19 @@ interface CodeControlPosition {
 
 /**
  * Code-block language select and copy button, positioned in the input's
- * scrolling content and clipped by the scrollport. The select rewrites the
- * fence info string through the revision-guarded transaction bridge; the copy
- * button reads the precomputed body and never touches the draft.
+ * scrolling content and clipped by the scrollport.
  */
 function CodeBlockControls({
-  frame, input, context, blocks, apply,
+  frame, input, draftRev, blocks, codeBlockElements, apply,
 }: {
   readonly frame: HTMLElement
   readonly input: HTMLElement
-  readonly context: ComposerDecorationContext
-  readonly blocks: readonly MarkdownCodeCopyBlock[]
+  readonly draftRev: number
+  readonly blocks: readonly CodeBlockOverlay[]
+  readonly codeBlockElements: ReadonlyMap<number, HTMLElement>
   readonly apply: (edit: ComposerEditResult, draftRev: number) => boolean
 }) {
   const layerRef = useRef<HTMLDivElement | null>(null)
-  const anchorsRef = useRef<readonly MarkdownCodeCopyAnchor[]>([])
   const [positions, setPositions] = useState<readonly CodeControlPosition[]>([])
   const [hoveredStart, setHoveredStart] = useState<number | undefined>()
   const [copiedStart, setCopiedStart] = useState<number | undefined>()
@@ -684,24 +805,20 @@ function CodeBlockControls({
   useSafeLayoutEffect(() => {
     if (layerRef.current === null) return () => {}
     const measure = (): void => {
-      const anchors = codeCopyBlockAnchors(input, context.draft, context.nativeRanges, blocks)
-      if (anchors === undefined) return
-      anchorsRef.current = anchors
-      if (anchors.length === 0) {
-        setPositions(previous => previous.length === 0 ? previous : [])
-        return
-      }
       const frameRect = frame.getBoundingClientRect()
-      const next = anchors.flatMap(anchor => {
-        const rect = anchor.element.getBoundingClientRect()
-        if (rect.width === 0 && rect.height === 0) return []
-        return [{
-          start: anchor.start,
+      const next: CodeControlPosition[] = []
+      for (const block of blocks) {
+        const element = codeBlockElements.get(block.start)
+        if (element === undefined) continue
+        const rect = element.getBoundingClientRect()
+        if (rect.width === 0 && rect.height === 0) continue
+        next.push({
+          start: block.start,
           top: rect.top - frameRect.top + 8,
           languageLeft: rect.left - frameRect.left + 12,
           copyLeft: rect.right - frameRect.left - 36,
-        }]
-      })
+        })
+      }
       setPositions(previous => samePositions(previous, next, position =>
         `${position.start}:${position.top}:${position.languageLeft}:${position.copyLeft}`) ? previous : next)
     }
@@ -717,7 +834,7 @@ function CodeBlockControls({
       window.removeEventListener('resize', schedule)
       observer?.disconnect()
     }
-  }, [frame, input, blocks, context])
+  }, [frame, input, blocks, codeBlockElements])
 
   useEffect(() => {
     const layer = layerRef.current
@@ -725,9 +842,13 @@ function CodeBlockControls({
     const onPointerOver = (event: Event): void => {
       const target = event.target
       if (!(target instanceof Element)) return
-      const block = target.closest<HTMLElement>('.dsh-better-composer-code-block')
-      const anchor = anchorsRef.current.find(candidate => candidate.element === block)
-      if (anchor !== undefined) setHoveredStart(anchor.start)
+      const blockEl = target.closest<HTMLElement>('.dsh-better-composer-code-block')
+      for (const block of blocks) {
+        if (codeBlockElements.get(block.start) === blockEl) {
+          setHoveredStart(block.start)
+          break
+        }
+      }
     }
     const onPointerOut = (event: Event): void => {
       const related = (event as PointerEvent).relatedTarget
@@ -740,7 +861,7 @@ function CodeBlockControls({
       input.removeEventListener('pointerover', onPointerOver)
       input.removeEventListener('pointerout', onPointerOut)
     }
-  }, [input, blocks, context])
+  }, [input, blocks, codeBlockElements])
 
   return <div ref={layerRef} className="dsh-better-composer-code-copy-layer">
     {positions.map(position => {
@@ -760,7 +881,7 @@ function CodeBlockControls({
           onPointerDown={event => { event.stopPropagation() }}
           onKeyDown={event => { event.stopPropagation() }}
           onChange={event => {
-            const accepted = apply(codeFenceLanguageEdit(block, event.currentTarget.value), context.draftRev)
+            const accepted = apply(codeFenceLanguageEdit(block, event.currentTarget.value), draftRev)
             if (!accepted) event.currentTarget.value = block.language
           }}
         >

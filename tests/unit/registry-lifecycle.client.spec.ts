@@ -8,7 +8,7 @@ function makeCtx(cleanups: Array<() => void>) {
   }
   const listeners = new Set<() => void>()
   const settingsScope = {
-    getSnapshot: () => ({ value: { enabled: true, markdownVisual: true, diagnostics: true, toolbarMode: 'compact' } }),
+    getSnapshot: () => ({ value: { enabled: true, markdownVisual: true, inactiveMarkerDisplay: 'hide', toolbarMode: 'compact' } }),
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     set: vi.fn(async () => {}),
     unset: vi.fn(async () => {}),

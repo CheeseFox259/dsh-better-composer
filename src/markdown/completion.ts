@@ -1,6 +1,6 @@
 import type { ComposerEditResult } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ComposerNativeRange } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { MAX_COMPLETION_SCAN_LENGTH } from './limits.ts'
+import { MAX_COMPLETION_SCAN_LENGTH } from '../decoration/internal/limits.ts'
 
 /** Native interaction owner that has priority over Markdown completion. */
 export type MarkdownCompletionTriggerOwner = 'none' | 'at' | 'slash' | 'native'

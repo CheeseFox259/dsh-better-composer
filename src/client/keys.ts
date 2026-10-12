@@ -6,15 +6,18 @@
  * consumed only while this plugin owns the interaction: an open completion
  * popup/ghost or list indentation. Formatting shortcuts are deliberately
  * left to the official Core so they keep their native scope and caret.
- * Everything else passes through untouched (host slash menu, IME, Enter and
- * native Shift+Enter editing).
+ * Shift+Enter is never consumed either — the keymap only arms a list/quote
+ * continuation (`armBreakContinuation`) that the overlay settles once the
+ * host's native break lands in the draft, because the public InputActions
+ * seam cannot split a paragraph while preserving the caret. Everything else
+ * passes through untouched (host slash menu, IME, Enter submit).
  */
 
 import type {
   ComposerEditResult, ComposerSurfaceExtension,
   ComposerSurfaceExtensionContext, ComposerSurfaceExtensionPresentation,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { runComposerStructuralCommand, type ComposerStructuralCommandKind } from '../markdown/structural-editing.ts'
+import { runComposerStructuralCommand, armBreakContinuation, type ArmedBreakContinuation, type ComposerStructuralCommandKind } from '../markdown/structural-editing.ts'
 
 /** Live faces the keymap reads per event. */
 export interface ComposerKeymapHooks {
@@ -28,6 +31,8 @@ export interface ComposerKeymapHooks {
   readonly extension: ComposerSurfaceExtension
   /** Apply one edit through the revision-guarded input actions. */
   readonly apply: (edit: ComposerEditResult, draftRev: number) => boolean
+  /** Record (or clear) the Shift+Enter continuation intent for the overlay. */
+  readonly noteBreakContinuation?: (armed: ArmedBreakContinuation | undefined) => void
   /** Synchronous enabled read; inert while disabled. */
   readonly isEnabled: () => boolean
 }
@@ -78,6 +83,19 @@ export function installComposerKeymap(hooks: ComposerKeymapHooks): () => void {
         event.stopPropagation()
         return
       }
+    }
+
+    // List/quote continuation on Shift+Enter: the key itself always passes
+    // through so the host inserts its native break; the armed intent is
+    // settled against the resulting draft by the overlay. While a completion
+    // popup/ghost owns the interaction no continuation is armed.
+    if (hooks.noteBreakContinuation !== undefined) {
+      const popupOpen = presentation !== undefined && (presentation.popup !== undefined || presentation.ghost !== undefined)
+      hooks.noteBreakContinuation(
+        key.key === 'enter' && key.shift && !popupOpen
+          ? armBreakContinuation(context.draft, context.selection, context.nativeRanges)
+          : undefined,
+      )
     }
 
     // Structural editing owns Tab/Shift+Tab (list indent/outdent). Enter,

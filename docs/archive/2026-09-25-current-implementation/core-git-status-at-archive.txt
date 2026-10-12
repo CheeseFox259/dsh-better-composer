@@ -1,0 +1,7 @@
+ M packages/client/ui-conversation/src/client/input/editor/runtime.ts
+ M packages/client/ui-conversation/src/client/input/editor/span-map.ts
+ M packages/client/ui-conversation/tests/apply-inject.client.spec.tsx
+ M packages/client/ui-conversation/tests/lexical-editor-core.client.spec.tsx
+?? .dsh/pastes/pasted-text-clip-mufae60t-1.md
+?? .dsh/pastes/pasted-text-clip-mufauomz-1.md
+?? .dsh/pastes/pasted-text-clip-mufcsnvu-1.md

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { createEnabledActions } from '../../src/commands/actions.ts'
 import { createMarkdownSurfaceExtension } from '../../src/client/surface-extension.ts'
 import { DEFAULT_SETTINGS } from '../../src/settings.ts'
-import { createMarkdownProvider } from '../../src/markdown/provider.ts'
+import { decorateViaPlan } from '../helpers/project-ranges.ts'
 
-describe('M5 deterministic completion and diagnostics', () => {
+describe('M5 deterministic completion', () => {
   it('does not register printable Markdown input actions that compete with M4 pairing', () => {
     const actions = createEnabledActions(() => true, () => true)
 
@@ -120,56 +120,6 @@ describe('M5 deterministic completion and diagnostics', () => {
     expect(markdownCompletion({ ...base, composing: false, triggerOwner: 'slash' })).toBeUndefined()
   })
 
-  it('scans each authoritative text segment independently across a Context Object barrier', async () => {
-    const diagnosticsModule = await import('../../src/markdown/diagnostics.ts')
-    const diagnosticsForSegments = Reflect.get(diagnosticsModule, 'diagnosticsForSegments')
-    expect(diagnosticsForSegments).toEqual(expect.any(Function))
-    if (typeof diagnosticsForSegments !== 'function') return
-
-    const diagnostics = diagnosticsForSegments({
-      draftRev: 13,
-      segments: [
-        { sourceStart: 0, text: '😀``' },
-        { sourceStart: 6, text: '`' },
-      ],
-    })
-
-    expect(diagnostics).toEqual(expect.arrayContaining([
-      expect.objectContaining({ start: 2, end: 4, layer: 'diagnostic' }),
-      expect.objectContaining({ start: 6, end: 7, layer: 'diagnostic' }),
-    ]))
-  })
-
-  it('reports incomplete inline-code and explicit-link diagnostics with translated UTF-16 ranges', async () => {
-    const diagnosticsModule = await import('../../src/markdown/diagnostics.ts')
-    const diagnosticsForSegments = Reflect.get(diagnosticsModule, 'diagnosticsForSegments')
-    expect(diagnosticsForSegments).toEqual(expect.any(Function))
-    if (typeof diagnosticsForSegments !== 'function') return
-
-    const diagnostics = diagnosticsForSegments({
-      draftRev: 14,
-      segments: [
-        { sourceStart: 2, text: 'inline `code' },
-        { sourceStart: 20, text: '[label](url' },
-      ],
-    })
-
-    expect(diagnostics).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        start: 9,
-        end: 10,
-        className: 'dsh-better-composer-diagnostic-inline-code',
-        layer: 'diagnostic',
-      }),
-      expect.objectContaining({
-        start: 20,
-        end: 31,
-        className: 'dsh-better-composer-diagnostic-link',
-        layer: 'diagnostic',
-      }),
-    ]))
-  })
-
   it('rejects stale completion acceptance before calling the Core transaction bridge', async () => {
     const completionModule = await import('../../src/markdown/completion.ts')
     const acceptMarkdownCompletion = Reflect.get(completionModule, 'acceptMarkdownCompletion')
@@ -261,19 +211,13 @@ describe('M5 deterministic completion and diagnostics', () => {
     })).toBe('pass')
   })
 
-  it('keeps Markdown parsing local to Core text segments', () => {
-    const provider = createMarkdownProvider(() => DEFAULT_SETTINGS)
-    const draft = '**ab**'
-    const ranges = provider.decorate({
-      sessionId: 's' as never,
+  it('never infers Markdown across a Context Object', () => {
+    // A reference chip splits the draft into ordinary segments; a construct
+    // whose markers sit on opposite sides of the chip must not parse.
+    const draft = '**a@clip:ab**'
+    const ranges = decorateViaPlan({
       draft,
-      draftRev: 23,
-      nativeRanges: [],
-      textSegments: [
-        { start: 0, end: 3, text: '**a' },
-        { start: 3, end: draft.length, text: 'b**' },
-      ],
-      presentation: { focused: false, selectionStart: 0, selectionEnd: 0, activeLineStart: 0, activeLineEnd: draft.length },
+      nativeRanges: [{ start: 3, end: 11, kind: 'clip' }],
     })
     expect(ranges).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-strong' }),

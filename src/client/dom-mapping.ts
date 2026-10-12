@@ -10,6 +10,9 @@
 
 import type { ComposerNativeRange } from '@deepseek-ai/dsh-client-ui-conversation/client'
 
+/** Only the offsets are needed; the host's `kind` tag is irrelevant to DOM mapping. */
+type NativeRangeLike = Pick<ComposerNativeRange, 'start' | 'end'>
+
 /** One ordinary text node mapped to authoritative UTF-16 draft offsets. */
 export interface ComposerDomTextRun {
   readonly node: Text
@@ -113,7 +116,7 @@ function extractBlockUnits(element: HTMLElement): BlockUnit[] {
 export function composerDomTextRuns(
   root: HTMLElement,
   source: string,
-  nativeRanges: readonly ComposerNativeRange[],
+  nativeRanges: readonly NativeRangeLike[],
 ): ComposerDomTextRun[] | undefined {
   const blocks = directBlocks(root)
   if (blocks.length === 0) return undefined
@@ -152,7 +155,7 @@ export function composerDomTextRuns(
 export function composerDomBlockRuns(
   root: HTMLElement,
   source: string,
-  nativeRanges: readonly ComposerNativeRange[],
+  nativeRanges: readonly NativeRangeLike[],
 ): ComposerDomBlockRun[] | undefined {
   const blocks = directBlocks(root)
   if (blocks.length === 0) return undefined
@@ -206,7 +209,7 @@ function directBlocks(root: HTMLElement): HTMLElement[] {
   return [...root.children].filter((child): child is HTMLElement => child instanceof HTMLElement)
 }
 
-function ordinarySource(source: string, nativeRanges: readonly ComposerNativeRange[]): string {
+function ordinarySource(source: string, nativeRanges: readonly NativeRangeLike[]): string {
   const ranges = sortedNativeRanges(source, nativeRanges)
   let cursor = 0
   let result = ''
@@ -219,7 +222,7 @@ function ordinarySource(source: string, nativeRanges: readonly ComposerNativeRan
 
 function sourceOffsetAtOrdinaryIndex(
   source: string,
-  nativeRanges: readonly ComposerNativeRange[],
+  nativeRanges: readonly NativeRangeLike[],
   ordinaryIndex: number,
   bias: 'start' | 'end',
 ): number | undefined {
@@ -239,7 +242,7 @@ interface OrdinaryProjection {
   readonly after: readonly number[]
 }
 
-function ordinaryProjection(source: string, nativeRanges: readonly ComposerNativeRange[]): OrdinaryProjection {
+function ordinaryProjection(source: string, nativeRanges: readonly NativeRangeLike[]): OrdinaryProjection {
   const before: number[] = []
   const after: number[] = []
   let text = ''
@@ -276,8 +279,8 @@ function ordinaryProjection(source: string, nativeRanges: readonly ComposerNativ
 
 function sortedNativeRanges(
   source: string,
-  nativeRanges: readonly ComposerNativeRange[],
-): ComposerNativeRange[] {
+  nativeRanges: readonly NativeRangeLike[],
+): NativeRangeLike[] {
   return nativeRanges
     .filter(range => Number.isInteger(range.start) && Number.isInteger(range.end)
       && range.start >= 0 && range.start < range.end && range.end <= source.length)

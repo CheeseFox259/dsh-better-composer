@@ -1,6 +1,6 @@
 {
   "name": "@cheesefox/dsh-better-composer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Markdown presentation, long-paste clips, and a live context map for the DSH web composer — a dsh profile plugin.",
   "type": "module",
   "license": "MIT",
@@ -35,6 +35,10 @@
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
+    "./doctor-compaction": {
+      "types": "./lib/types/doctor/compaction.d.ts",
+      "default": "./lib/doctor-compaction.js"
+    },
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
@@ -46,7 +50,8 @@
       "inject": [
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-ui-settings-plugins"
+        "@deepseek-ai/dsh-client-ui-settings-plugins",
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
       ],
       "platform": "web"
     }
@@ -62,6 +67,7 @@
   "files": [
     "lib/index.js",
     "lib/client.js",
+    "lib/doctor-compaction.js",
     "lib/types/**/*.d.ts",
     "cordis.patch.yml",
     "README.md",
@@ -71,31 +77,56 @@
   "peerDependencies": {
     "@deepseek-ai/dsh-client-ui-conversation": ">=0.1.7-alpha.1",
     "@deepseek-ai/dsh-client-ui-renderer": ">=0.1.7-alpha.1",
-    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.7-alpha.1",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.7-alpha.2",
     "@deepseek-ai/dsh-client-ui-settings": ">=0.1.7-alpha.1",
     "@deepseek-ai/dsh-client-ui-settings-plugins": ">=0.1.7-alpha.1",
     "@deepseek-ai/dsh-client-ui-slots": ">=0.1.7-alpha.1",
     "@deepseek-ai/dsh-settings": ">=0.1.7-alpha.1",
+    "@deepseek-ai/dsh-session": ">=0.1.7-alpha.2",
+    "@deepseek-ai/dsh-session-persistence": ">=0.1.7-alpha.2",
+    "@deepseek-ai/dsh-agent-preset-registry": ">=0.1.7-alpha.2",
+    "@deepseek-ai/dsh-compaction": ">=0.1.7-alpha.2",
+    "@deepseek-ai/dsh-compaction-basic": ">=0.1.7-alpha.2",
+    "@deepseek-ai/dsh-llm": ">=0.1.7-alpha.2",
+    "@deepseek-ai/dsh-tools": ">=0.1.7-alpha.2",
+    "@deepseek-ai/dsh-token-meter": ">=0.1.7-alpha.2",
+    "@deepseek-ai/dsh-tool-skill": ">=0.1.7-alpha.2",
+    "@deepseek-ai/dsh-mcp-client": ">=0.1.7-alpha.2",
+    "@deepseek-ai/dsh-workspace": ">=0.1.7-alpha.2",
+    "@deepseek-ai/dsh-agent": ">=0.1.7-alpha.2",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@deepseek-ai/cordis": "^4.0.1",
-    "react": "^18.2.0"
+    "react": "^18.2.0",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": ">=0.1.7-alpha.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-agent": "0.1.7-alpha.2",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.1.7-alpha.2",
     "@deepseek-ai/dsh-api-session-controller": "0.1.7-alpha.1",
     "@deepseek-ai/dsh-client-store": "0.1.7-alpha.1",
     "@deepseek-ai/dsh-client-ui-conversation": "0.1.7-alpha.1",
     "@deepseek-ai/dsh-client-ui-input-trigger": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-alpha.2",
     "@deepseek-ai/dsh-client-ui-settings": "0.1.7-alpha.1",
     "@deepseek-ai/dsh-client-ui-settings-plugins": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-client-ui-sidebar-right": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "0.1.7-alpha.2",
     "@deepseek-ai/dsh-client-ui-slots": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-compaction": "0.1.7-alpha.2",
+    "@deepseek-ai/dsh-compaction-basic": "0.1.7-alpha.2",
     "@deepseek-ai/dsh-home-paths": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-llm": "0.1.7-alpha.2",
+    "@deepseek-ai/dsh-mcp-client": "0.1.7-alpha.2",
+    "@deepseek-ai/dsh-session": "0.1.7-alpha.2",
+    "@deepseek-ai/dsh-session-persistence": "0.1.7-alpha.2",
     "@deepseek-ai/dsh-settings": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-token-meter": "0.1.7-alpha.2",
+    "@deepseek-ai/dsh-tool-skill": "0.1.7-alpha.2",
+    "@deepseek-ai/dsh-tools": "0.1.7-alpha.2",
     "@deepseek-ai/dsh-typert-generator": "0.1.7-alpha.1",
     "@deepseek-ai/dsh-typert-protocol": "0.1.7-alpha.1",
     "@deepseek-ai/dsh-util-workspace-path": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-workspace": "0.1.7-alpha.2",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@shikijs/langs": "^4.0.0",
     "@tsdown/css": "^0.22.14",

@@ -4,6 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { DEFAULT_PASTE_FILE_EXTENSION, normalizePasteFileExtension, type PasteFileExtension } from './file-extensions.ts'
+import { DoctorRuntime, type ConstraintScope } from './doctor/host/runtime.ts'
 
 /** Wire namespace for the plugin's Host-side Remote face. */
 export const REMOTE_NAMESPACE = 'betterComposer'
@@ -26,10 +27,207 @@ interface ClipRecord {
  */
 export class BetterComposerRemoteService extends TypertRemoteService {
   private readonly hostCtx: Context
+  private readonly doctor: DoctorRuntime
 
   constructor(ctx: Context) {
     super(ctx, REMOTE_NAMESPACE)
     this.hostCtx = ctx
+    this.doctor = DoctorRuntime.create(ctx)
+    ctx.reflect.provide('betterComposerDoctor', this.doctor)
+    if (typeof ctx.on === 'function') ctx.on('dispose', () => this.doctor.dispose())
+  }
+
+  /** Which Doctor dimensions are live in this deployment, with reasons (AT35). */
+  @Remote
+  async doctorCapabilities(): Promise<ReturnType<DoctorRuntime['capabilities']>> {
+    return this.doctor.capabilities()
+  }
+
+  /** Declared preset roster with activation diagnostics, for the mode lens. */
+  @Remote
+  async doctorModes(): Promise<Awaited<ReturnType<DoctorRuntime['modes']>>> {
+    return this.doctor.modes()
+  }
+
+  /** Start a deterministic scan; returns the job id immediately (AT18/19). */
+  @Remote
+  async doctorStartScan(request: {
+    readonly sessionIds?: readonly string[]
+    readonly modeId?: string
+    readonly cutoffSeq?: number
+  }): Promise<{ readonly jobId: string }> {
+    if (request.sessionIds !== undefined && (!Array.isArray(request.sessionIds) || request.sessionIds.some((id) => typeof id !== 'string'))) {
+      throw new Error('doctorStartScan requires string session ids')
+    }
+    return { jobId: this.doctor.startScan(request).jobId }
+  }
+
+  /** Poll one scan job's progress and terminal state. */
+  @Remote
+  async doctorJob(request: { readonly jobId: string }): Promise<{
+    readonly state: string
+    readonly total: number
+    readonly done: number
+    readonly failed: number
+  } | undefined> {
+    return this.doctor.job(request.jobId)
+  }
+
+  /** Idempotent cancellation of one scan job; never touches user Agents. */
+  @Remote
+  async doctorCancelJob(request: { readonly jobId: string }): Promise<{ readonly cancelled: boolean }> {
+    return { cancelled: this.doctor.cancel(request.jobId) }
+  }
+
+  /** The frozen report produced by a finished scan job, when one exists. */
+  @Remote
+  async doctorReport(request: { readonly jobId: string }): Promise<unknown | undefined> {
+    return this.doctor.report(request.jobId) ?? undefined
+  }
+
+  /** Return recorded problems and occurrences in a single tree (no N+1). */
+  @Remote
+  async doctorFeedbackTree(): Promise<Awaited<ReturnType<DoctorRuntime['feedbackTree']>>> {
+    return this.doctor.feedbackTree()
+  }
+
+  /** Two-step feedback: record a problem occurrence with its evidence (AT20). */
+  @Remote
+  async doctorSaveFeedback(request: {
+    readonly problemId?: string
+    readonly targetProblemId?: string
+    readonly problemTitle?: string
+    readonly occurrenceId?: string
+    readonly occurrence: Record<string, unknown>
+  }): Promise<Awaited<ReturnType<DoctorRuntime['saveFeedback']>>> {
+    if (request.occurrence === null || typeof request.occurrence !== 'object') {
+      throw new Error('doctorSaveFeedback requires an occurrence object')
+    }
+    return this.doctor.saveFeedback(request)
+  }
+
+  /** Edit/withdraw/merge feedback under optimistic revision control (AT36). */
+  @Remote
+  async doctorUpdateFeedback(request: {
+    readonly kind: 'problem' | 'occurrence'
+    readonly objectId: string
+    readonly expectedRevision: number
+    readonly patch: Record<string, unknown>
+  }): Promise<Awaited<ReturnType<DoctorRuntime['updateFeedback']>>> {
+    return this.doctor.updateFeedback({
+      kind: request.kind,
+      objectId: request.objectId,
+      expectedRevision: request.expectedRevision,
+      mutate: (data) => ({ ...data, ...request.patch }),
+    })
+  }
+
+  /** Confirm a reviewed constraint candidate (it becomes compaction input). */
+  @Remote
+  async doctorSaveConstraint(request: {
+    readonly id: string
+    readonly originalText: string
+    readonly normalizedRequirement: string
+    readonly conditions?: readonly string[]
+    readonly exceptions?: readonly string[]
+    readonly sourceRefs?: readonly string[]
+    readonly scope: ConstraintScope
+  }): Promise<Awaited<ReturnType<DoctorRuntime['constraints']>>> {
+    if (typeof request.id !== 'string' || typeof request.originalText !== 'string' || typeof request.normalizedRequirement !== 'string') {
+      throw new Error('doctorSaveConstraint requires id, originalText, and normalizedRequirement strings')
+    }
+    if (request.scope?.kind === 'session' ? typeof request.scope.sessionId !== 'string'
+      : request.scope?.kind !== 'mode' || typeof request.scope.modeId !== 'string') throw new Error('constraint scope is required')
+    await this.doctor.saveConstraint({
+      id: request.id,
+      originalText: request.originalText,
+      normalizedRequirement: request.normalizedRequirement,
+      conditions: Array.isArray(request.conditions) ? request.conditions.filter((item): item is string => typeof item === 'string') : [],
+      exceptions: Array.isArray(request.exceptions) ? request.exceptions.filter((item): item is string => typeof item === 'string') : [],
+      sourceRefs: request.sourceRefs ?? [],
+      scope: request.scope,
+    })
+    return this.doctor.constraints()
+  }
+
+  /** Edit/revoke a confirmed constraint under optimistic revision control. */
+  @Remote
+  async doctorUpdateConstraint(request: {
+    readonly id: string
+    readonly expectedRevision: number
+    readonly patch: Record<string, unknown>
+  }): Promise<Awaited<ReturnType<DoctorRuntime['constraints']>>> {
+    await this.doctor.updateConstraint(request)
+    return this.doctor.constraints()
+  }
+
+  /** List constraints with revisions and status. */
+  @Remote
+  async doctorConstraints(): Promise<{ readonly id: string; readonly revision: number; readonly data: Record<string, unknown> }[]> {
+    return this.doctor.constraints()
+  }
+
+  /** Whether the semantic analysis dimension is available (model routing). */
+  @Remote
+  async doctorAnalysisAvailable(): Promise<{ readonly available: boolean }> {
+    return { available: this.doctor.analysisAvailable() }
+  }
+
+  @Remote
+  async doctorEvidence(request: { readonly sessionId: string; readonly offset?: number; readonly cutoffSeq?: number; readonly refs?: readonly string[] }) {
+    if (typeof request.sessionId !== 'string') throw new Error('sessionId is required')
+    return this.doctor.evidence(request.sessionId, request.offset, request.cutoffSeq, request.refs)
+  }
+
+  @Remote
+  async doctorPrepareProvider(request: { readonly modeId: string; readonly enabled: boolean }) {
+    if (typeof request.modeId !== 'string' || typeof request.enabled !== 'boolean') throw new Error('modeId and enabled are required')
+    return this.doctor.providerPlans.prepare(request.modeId, request.enabled)
+  }
+
+  @Remote
+  async doctorApplyProvider(request: { readonly planId: string }): Promise<{ applied: true }> {
+    await this.doctor.providerPlans.apply(request.planId)
+    return { applied: true }
+  }
+
+  /** Price an analysis plan: input estimate, budget, gaps — no paid call. */
+  @Remote
+  async doctorPrepareAnalysis(request: {
+    readonly kind: 'session-quality' | 'mode-quality' | 'requirement-distill'
+    readonly sessionId?: string
+    readonly modeId?: string
+    readonly reportId?: string
+    readonly evidenceRefs?: readonly string[]
+    readonly model: { readonly provider: string; readonly model: string }
+  }): Promise<unknown> {
+    if (!['session-quality', 'mode-quality', 'requirement-distill'].includes(request.kind)
+      || typeof request.model?.provider !== 'string' || typeof request.model.model !== 'string'
+      || (request.evidenceRefs !== undefined && (!Array.isArray(request.evidenceRefs) || request.evidenceRefs.some((item) => typeof item !== 'string')))) {
+      throw new Error('invalid analysis preparation')
+    }
+    return this.doctor.prepareAnalysis(request) as unknown
+  }
+
+  /** Run a prepared plan under an idempotency key (≤2 calls, fixed budget). */
+  @Remote
+  async doctorRunAnalysis(request: {
+    readonly plan: unknown
+    readonly idempotencyKey: string
+  }): Promise<{ readonly jobId: string }> {
+    return { jobId: (await this.doctor.runAnalysis(request.plan as never, { idempotencyKey: request.idempotencyKey })).jobId }
+  }
+
+  /** Poll an analysis job. */
+  @Remote
+  async doctorAnalysisJob(request: { readonly jobId: string }): Promise<unknown> {
+    return this.doctor.analysisJob(request.jobId) ?? undefined
+  }
+
+  /** Cancel an analysis job; known cost stays recorded. */
+  @Remote
+  async doctorCancelAnalysis(request: { readonly jobId: string }): Promise<{ readonly cancelled: boolean }> {
+    return { cancelled: this.doctor.cancelAnalysis(request.jobId) }
   }
 
   /** Persist one pasted-text clip under the harness home. */

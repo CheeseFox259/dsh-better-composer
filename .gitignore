@@ -6,3 +6,5 @@
 *.log
 .env*
 coverage/
+/.codex/handoff/active.md
+/.codex/handoff/archive/

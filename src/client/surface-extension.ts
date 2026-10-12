@@ -2,16 +2,9 @@ import type {
   ComposerSurfaceExtension, ComposerSurfaceExtensionPresentation,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { acceptMarkdownCompletion, markdownCompletion } from '../markdown/completion.ts'
-import { diagnosticsForSegments } from '../markdown/diagnostics.ts'
-import { MAX_SYNC_PROJECTION_LENGTH } from '../markdown/limits.ts'
+import { MAX_SYNC_PROJECTION_LENGTH } from '../decoration/internal/limits.ts'
 import type { BetterComposerSettings } from '../settings.ts'
 import type { BetterComposerSettingsStore } from './settings-store.ts'
-
-const DIAGNOSTIC_MESSAGES: Readonly<Record<string, string>> = {
-  'dsh-better-composer-diagnostic-fence': '代码块未闭合',
-  'dsh-better-composer-diagnostic-inline-code': '行内代码定界符未闭合',
-  'dsh-better-composer-diagnostic-link': '显式链接格式不完整',
-}
 
 /** Create the session-local deterministic Markdown surface contribution. */
 export function createMarkdownSurfaceExtension(settings: BetterComposerSettingsStore): ComposerSurfaceExtension {
@@ -56,17 +49,6 @@ export function createMarkdownSurfaceExtension(settings: BetterComposerSettingsS
           label: visibleCompletion.label,
         }
         : undefined
-      const diagnostics = current.diagnostics
-        ? diagnosticsForSegments({
-          draftRev: context.draftRev,
-          segments: context.textSegments.map(segment => ({ sourceStart: segment.start, text: segment.text })),
-        }).map(diagnostic => ({
-          start: diagnostic.start,
-          end: diagnostic.end,
-          className: diagnostic.className,
-          message: DIAGNOSTIC_MESSAGES[diagnostic.className] ?? 'Markdown 语法提示',
-        }))
-        : []
       const hints = [
         // The decoration provider fails open past the sync-projection bound;
         // say so instead of letting Markdown paint silently vanish.
@@ -76,16 +58,16 @@ export function createMarkdownSurfaceExtension(settings: BetterComposerSettingsS
             kind: 'limits',
             start: 0,
             end: 0,
-            message: `草稿超过 ${MAX_SYNC_PROJECTION_LENGTH.toLocaleString()} 字符，Markdown 视觉增强与诊断已暂停。`,
+            message: `草稿超过 ${MAX_SYNC_PROJECTION_LENGTH.toLocaleString()} 字符，Markdown 视觉增强已暂停。`,
           }]
           : []),
       ]
-      if (popup === undefined && ghost === undefined && diagnostics.length === 0 && hints.length === 0) return undefined
+      if (popup === undefined && ghost === undefined && hints.length === 0) return undefined
       return {
         revision: context.draftRev,
         ...(popup === undefined ? {} : { popup }),
         ...(ghost === undefined ? {} : { ghost }),
-        diagnostics,
+        diagnostics: [],
         ...(hints.length === 0 ? {} : { hints }),
       }
     },

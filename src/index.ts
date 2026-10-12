@@ -13,7 +13,7 @@ const SETTINGS_NS = SETTINGS_NAMESPACE
 export const Config: z<BetterComposerSettings> = z.object({
   enabled: z.boolean().default(DEFAULT_SETTINGS.enabled),
   markdownVisual: z.boolean().default(DEFAULT_SETTINGS.markdownVisual),
-  diagnostics: z.boolean().default(DEFAULT_SETTINGS.diagnostics),
+  inactiveMarkerDisplay: z.union(['hide', 'fade'] as const).default(DEFAULT_SETTINGS.inactiveMarkerDisplay),
   toolbarMode: z.union(['compact', 'hidden'] as const).default(DEFAULT_SETTINGS.toolbarMode),
   pasteClipThreshold: z.number().default(DEFAULT_SETTINGS.pasteClipThreshold),
   // Published schemastery lines infer slightly different schema generics;

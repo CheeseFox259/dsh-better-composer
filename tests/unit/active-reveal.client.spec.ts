@@ -1,19 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { createMarkdownProvider } from '../../src/markdown/provider.ts'
-import { DEFAULT_SETTINGS } from '../../src/settings.ts'
+import { decorateViaPlan } from '../helpers/project-ranges.ts'
 
 function decorate(draft: string, caret: number) {
-  return createMarkdownProvider(() => DEFAULT_SETTINGS).decorate({
-    sessionId: 'active-reveal' as never,
+  return decorateViaPlan({
     draft,
-    draftRev: 1,
     nativeRanges: [],
     presentation: {
       focused: true,
       selectionStart: caret,
       selectionEnd: caret,
-      activeLineStart: 0,
-      activeLineEnd: draft.length,
     },
   })
 }
@@ -27,15 +22,15 @@ describe('active construct block reveal', () => {
     const draft = '1. *'
     const ranges = decorate(draft, draft.length)
 
-    expect(blockClasses(ranges)).toContain('dsh-better-composer-bullet')
-    expect(blockClasses(ranges)).toContain('dsh-better-composer-ordered')
+    expect(blockClasses(ranges)).toContain('dsh-better-composer-list-item')
+    expect(blockClasses(ranges)).toContain('dsh-better-composer-list-depth-1')
   })
 
   it('restores the bullet decoration once the caret leaves the item', () => {
     const draft = '# t\n\n1. *'
     const ranges = decorate(draft, 1)
 
-    expect(blockClasses(ranges)).toContain('dsh-better-composer-bullet')
+    expect(blockClasses(ranges)).toContain('dsh-better-composer-list-item')
   })
 
   it('drops the thematic-break rule while typing `***`', () => {
@@ -62,6 +57,6 @@ describe('active construct block reveal', () => {
     const draft = '- [ ] todo'
     const ranges = decorate(draft, draft.length)
 
-    expect(blockClasses(ranges)).toContain('dsh-better-composer-task')
+    expect(blockClasses(ranges)).toContain('dsh-better-composer-list-item')
   })
 })

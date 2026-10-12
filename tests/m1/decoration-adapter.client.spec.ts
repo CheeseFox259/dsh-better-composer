@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from '../../src/client/index.ts'
-import { createMarkdownProvider } from '../../src/markdown/provider.ts'
+import { project } from '../../src/decoration/index.ts'
 
 function makeCtx(cleanups: Array<() => void>) {
   const once = (dispose: () => void): (() => void) => {
@@ -8,7 +8,7 @@ function makeCtx(cleanups: Array<() => void>) {
     return () => { if (!done) { done = true; dispose() } }
   }
   const settingsScope = {
-    getSnapshot: () => ({ value: { enabled: true, markdownVisual: true, diagnostics: true, toolbarMode: 'compact' } }),
+    getSnapshot: () => ({ value: { enabled: true, markdownVisual: true, inactiveMarkerDisplay: 'hide', toolbarMode: 'compact' } }),
     subscribe: () => () => {},
     set: vi.fn(async () => {}),
     unset: vi.fn(async () => {}),
@@ -100,15 +100,10 @@ describe('official seam adapter', () => {
     expect(settingsListeners).toHaveLength(0)
   })
 
-  it('keeps the pure Markdown provider decoration contract intact', () => {
-    const provider = createMarkdownProvider(() => ({ enabled: true, markdownVisual: true, diagnostics: false, toolbarMode: 'compact', pasteClipThreshold: 4000 }))
-    expect(provider.decorate({
-      sessionId: 's1' as never,
-      draft: '# x',
-      draftRev: 1,
-      nativeRanges: [],
-    })).toEqual(expect.arrayContaining([
-      expect.objectContaining({ className: 'dsh-better-composer-heading' }),
+  it('keeps the pure decoration projection contract intact', () => {
+    const plan = project('# x')
+    expect(plan.lines[0]?.signature).toContain('dsh-better-composer-heading')
+    expect(plan.inlines).toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-marker', start: 0, end: 2 }),
     ]))
   })

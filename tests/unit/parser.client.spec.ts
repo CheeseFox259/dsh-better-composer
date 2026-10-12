@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseGfm } from '@deepseek-ai/dsh-client-ui-primitives'
-import { projectGfm, rangesFromGfm } from '../../src/markdown/ast-ranges.ts'
-import { maskNative } from '../../src/markdown/native-mask.ts'
-import { createMarkdownProvider } from '../../src/markdown/provider.ts'
+import { projectGfm, rangesFromGfm } from '../../src/decoration/internal/ast-ranges.ts'
+import { decorateViaPlan } from '../helpers/project-ranges.ts'
 
 describe('Markdown projection', () => {
   it('maps the existing GFM tree and preserves UTF-16 offsets', () => {
@@ -66,8 +65,7 @@ describe('Markdown projection', () => {
       'dsh-better-composer-table-header-row',
       'dsh-better-composer-table-body-row',
       'dsh-better-composer-table-separator',
-      'dsh-better-composer-bullet',
-      'dsh-better-composer-ordered',
+      'dsh-better-composer-list-item',
       'dsh-better-composer-list-depth-1',
       'dsh-better-composer-list-depth-2',
       'dsh-better-composer-list-depth-3',
@@ -155,13 +153,10 @@ describe('Markdown projection', () => {
     expect(projection.structuralRanges).toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-thematic-break', target: 'block' }),
     ]))
-    const provider = createMarkdownProvider()
-    const ranges = provider.decorate({
-      sessionId: 'thematic-break' as never,
+    const ranges = decorateViaPlan({
       draft,
-      draftRev: 1,
       nativeRanges: [],
-      presentation: { focused: false, selectionStart: 0, selectionEnd: 0, activeLineStart: 0, activeLineEnd: 6 },
+      presentation: { focused: false, selectionStart: 0, selectionEnd: 0 },
     })
     expect(ranges).toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-thematic-break-marker-hidden' }),
@@ -171,12 +166,10 @@ describe('Markdown projection', () => {
 
   it('hides complete strikethrough markers outside the active selection', () => {
     const draft = '~~删除线~~'
-    const ranges = createMarkdownProvider().decorate({
-      sessionId: 'strike' as never,
+    const ranges = decorateViaPlan({
       draft,
-      draftRev: 2,
       nativeRanges: [],
-      presentation: { focused: false, selectionStart: 0, selectionEnd: 0, activeLineStart: 0, activeLineEnd: draft.length },
+      presentation: { focused: false, selectionStart: 0, selectionEnd: 0 },
     })
     expect(ranges).toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-marker-hidden', start: 0, end: 2 }),
@@ -192,19 +185,11 @@ describe('Markdown projection', () => {
     expect(markers).toEqual(['`', '`'])
   })
 
-  it('masks native ranges without changing draft length or newlines', () => {
-    const draft = 'before @src/\nafter'
-    const masked = maskNative(draft, [{ start: 7, end: 12, kind: 'text-reference' }])
-    expect(masked.length).toBe(draft.length)
-    expect(masked).toBe('before      \nafter')
-  })
-
   it('marks only the active physical line for marker reveal', () => {
-    const provider = createMarkdownProvider()
     const draft = '# One\n## Two'
-    const ranges = provider.decorate({
-      sessionId: 's' as never, draft, draftRev: 1, nativeRanges: [],
-      presentation: { focused: true, selectionStart: 8, selectionEnd: 8, activeLineStart: 6, activeLineEnd: draft.length },
+    const ranges = decorateViaPlan({
+      draft, nativeRanges: [],
+      presentation: { focused: true, selectionStart: 8, selectionEnd: 8 },
     })
     expect(ranges).toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-marker-active', start: 6, end: 9 }),
@@ -215,12 +200,12 @@ describe('Markdown projection', () => {
   })
 
   it('keeps marker-only Markdown lines dimmed when the caret leaves them', () => {
-    const provider = createMarkdownProvider()
     for (const source of ['1. ', '- ', '# ']) {
       const draft = `${source}\nplain`
-      const ranges = provider.decorate({
-        sessionId: 's' as never, draft, draftRev: draft.length, nativeRanges: [],
-        presentation: { focused: true, selectionStart: draft.length, selectionEnd: draft.length, activeLineStart: source.length + 1, activeLineEnd: draft.length },
+      const ranges = decorateViaPlan({
+        draft,
+        nativeRanges: [],
+        presentation: { focused: true, selectionStart: draft.length, selectionEnd: draft.length },
       })
       const className = source === '# '
         ? 'dsh-better-composer-marker'
@@ -235,12 +220,10 @@ describe('Markdown projection', () => {
 
   it('retains unordered-list depth on inactive source markers', () => {
     const draft = '- parent\n  - child\n    - grandchild'
-    const ranges = createMarkdownProvider().decorate({
-      sessionId: 's' as never,
+    const ranges = decorateViaPlan({
       draft,
-      draftRev: 17,
       nativeRanges: [],
-      presentation: { focused: false, selectionStart: 0, selectionEnd: 0, activeLineStart: 0, activeLineEnd: 0 },
+      presentation: { focused: false, selectionStart: 0, selectionEnd: 0 },
     })
 
     expect(ranges.filter(range => range.className.startsWith('dsh-better-composer-list-marker-depth-')).map(range => range.className)).toEqual([
@@ -252,28 +235,24 @@ describe('Markdown projection', () => {
 
   it('keeps a freshly continued list marker hidden while its AST is incomplete', () => {
     const draft = '- first\n- '
-    const ranges = createMarkdownProvider().decorate({
-      sessionId: 'fresh-list' as never,
+    const ranges = decorateViaPlan({
       draft,
-      draftRev: 19,
       nativeRanges: [],
-      presentation: { focused: false, selectionStart: -1, selectionEnd: -1, activeLineStart: -1, activeLineEnd: -1 },
+      presentation: { focused: false, selectionStart: -1, selectionEnd: -1 },
     })
 
     expect(ranges).toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-list-marker-depth-1-hidden', start: 8, end: 10 }),
-      expect.objectContaining({ target: 'block', className: 'dsh-better-composer-bullet' }),
+      expect.objectContaining({ target: 'block', className: 'dsh-better-composer-list-item' }),
     ]))
   })
 
   it('marks an inactive table separator separately from ordinary table punctuation', () => {
     const draft = '| Name | Value |\n| --- | --- |\n| A | 1 |'
-    const ranges = createMarkdownProvider().decorate({
-      sessionId: 's' as never,
+    const ranges = decorateViaPlan({
       draft,
-      draftRev: 18,
       nativeRanges: [],
-      presentation: { focused: false, selectionStart: 0, selectionEnd: 0, activeLineStart: 0, activeLineEnd: 0 },
+      presentation: { focused: false, selectionStart: 0, selectionEnd: 0 },
     })
 
     expect(ranges).toEqual(expect.arrayContaining([
@@ -294,19 +273,14 @@ describe('Markdown projection', () => {
   it('keeps the table separator row present only while its source is active', () => {
     const draft = '| Name | Value |\n| --- | --- |\n| A | 1 |'
     const separatorStart = draft.indexOf('| ---')
-    const provider = createMarkdownProvider()
 
-    const active = provider.decorate({
-      sessionId: 'table-separator-active' as never,
+    const active = decorateViaPlan({
       draft,
-      draftRev: 181,
       nativeRanges: [],
       presentation: {
         focused: true,
         selectionStart: separatorStart,
         selectionEnd: separatorStart,
-        activeLineStart: separatorStart,
-        activeLineEnd: separatorStart + '| --- | --- |'.length,
       },
     })
 
@@ -326,12 +300,10 @@ describe('Markdown projection', () => {
     expect(tableProjection.markerRanges.filter(range => range.className === 'dsh-better-composer-table-divider').length).toBe(6)
 
     const fenceDraft = 'plain\n```javascript\nconsole.log("ok")\n```'
-    const ranges = createMarkdownProvider().decorate({
-      sessionId: 'header' as never,
+    const ranges = decorateViaPlan({
       draft: fenceDraft,
-      draftRev: 19,
       nativeRanges: [],
-      presentation: { focused: true, selectionStart: 0, selectionEnd: 0, activeLineStart: 0, activeLineEnd: 5 },
+      presentation: { focused: true, selectionStart: 0, selectionEnd: 0 },
     })
     expect(ranges).toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-fence-language-visible' }),
@@ -341,12 +313,10 @@ describe('Markdown projection', () => {
 
   it('adds bounded syntax token ranges for a short known fence', () => {
     const draft = '```javascript\nconsole.log("ok")\n```'
-    const ranges = createMarkdownProvider().decorate({
-      sessionId: 'tokens' as never,
+    const ranges = decorateViaPlan({
       draft,
-      draftRev: 20,
       nativeRanges: [],
-      presentation: { focused: false, selectionStart: 0, selectionEnd: 0, activeLineStart: 0, activeLineEnd: 0 },
+      presentation: { focused: false, selectionStart: 0, selectionEnd: 0 },
     })
     expect(ranges.some(range => range.className.startsWith('dsh-better-composer-shiki-token-'))).toBe(true)
   })
@@ -384,10 +354,9 @@ describe('Markdown projection', () => {
 
   it('reveals only the selected construct and keeps incomplete syntax source-visible', () => {
     const draft = '**bold** and *italic* `open'
-    const provider = createMarkdownProvider()
-    const ranges = provider.decorate({
-      sessionId: 's' as never, draft, draftRev: 12, nativeRanges: [],
-      presentation: { focused: true, selectionStart: 2, selectionEnd: 4, activeLineStart: 0, activeLineEnd: draft.length },
+    const ranges = decorateViaPlan({
+      draft, nativeRanges: [],
+      presentation: { focused: true, selectionStart: 2, selectionEnd: 4 },
     })
     expect(ranges).toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-marker-active', start: 0, end: 2 }),
@@ -400,10 +369,9 @@ describe('Markdown projection', () => {
 
   it('keeps the complete fence language visible as an inactive code header', () => {
     const draft = 'plain\n```python\nprint(1)\n```'
-    const provider = createMarkdownProvider()
-    const inactive = provider.decorate({
-      sessionId: 's' as never, draft, draftRev: 13, nativeRanges: [],
-      presentation: { focused: true, selectionStart: 0, selectionEnd: 0, activeLineStart: 0, activeLineEnd: 5 },
+    const inactive = decorateViaPlan({
+      draft, nativeRanges: [],
+      presentation: { focused: true, selectionStart: 0, selectionEnd: 0 },
     })
     expect(inactive).toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-fence-language-visible' }),
@@ -412,30 +380,23 @@ describe('Markdown projection', () => {
 
   it('marks inactive fence edges for source-free visual spacing while preserving active editing', () => {
     const draft = '```javascript\nconsole.log("ok")\n```'
-    const provider = createMarkdownProvider()
-    const inactive = provider.decorate({
-      sessionId: 'fence-edges' as never,
+    const inactive = decorateViaPlan({
       draft,
-      draftRev: 21,
       nativeRanges: [],
-      presentation: { focused: false, selectionStart: -1, selectionEnd: -1, activeLineStart: -1, activeLineEnd: -1 },
+      presentation: { focused: false, selectionStart: -1, selectionEnd: -1 },
     })
     expect(inactive).toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-code-block-start-source-hidden', target: 'block' }),
       expect.objectContaining({ className: 'dsh-better-composer-code-block-end-source-hidden', target: 'block' }),
     ]))
 
-    const active = provider.decorate({
-      sessionId: 'fence-edges',
+    const active = decorateViaPlan({
       draft,
-      draftRev: 22,
       nativeRanges: [],
       presentation: {
         focused: true,
         selectionStart: 1,
         selectionEnd: 1,
-        activeLineStart: 0,
-        activeLineEnd: 14,
       },
     })
     expect(active).toEqual(expect.arrayContaining([
@@ -446,14 +407,11 @@ describe('Markdown projection', () => {
 
   it('keeps fence markers hidden while the caret is inside code content', () => {
     const draft = '```javascript\nconsole.log("ok")\n```'
-    const provider = createMarkdownProvider()
     const bodyStart = draft.indexOf('console')
-    const ranges = provider.decorate({
-      sessionId: 'fence-marker-visibility' as never,
+    const ranges = decorateViaPlan({
       draft,
-      draftRev: 23,
       nativeRanges: [],
-      presentation: { focused: true, selectionStart: bodyStart, selectionEnd: bodyStart, activeLineStart: bodyStart, activeLineEnd: bodyStart + 'console.log("ok")'.length },
+      presentation: { focused: true, selectionStart: bodyStart, selectionEnd: bodyStart },
     })
     expect(ranges).toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-fence-marker-hidden', start: 0 }),
@@ -462,13 +420,10 @@ describe('Markdown projection', () => {
   })
 
   it('does not mark a construct active while the editor is unfocused', () => {
-    const provider = createMarkdownProvider()
-    const ranges = provider.decorate({
-      sessionId: 's' as never,
+    const ranges = decorateViaPlan({
       draft: '**bold**\nplain',
-      draftRev: 14,
       nativeRanges: [],
-      presentation: { focused: false, selectionStart: 0, selectionEnd: 0, activeLineStart: 0, activeLineEnd: 0 },
+      presentation: { focused: false, selectionStart: 0, selectionEnd: 0 },
     })
     expect(ranges).toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-marker-hidden' }),
@@ -479,19 +434,14 @@ describe('Markdown projection', () => {
   })
 
   it('keeps complete Markdown markers source-visible during composition', () => {
-    const provider = createMarkdownProvider()
-    const ranges = provider.decorate({
-      sessionId: 's' as never,
+    const ranges = decorateViaPlan({
       draft: '**bold**',
-      draftRev: 15,
       nativeRanges: [],
       presentation: {
         focused: true,
         composing: true,
         selectionStart: 10,
         selectionEnd: 10,
-        activeLineStart: 0,
-        activeLineEnd: 14,
       },
     })
     expect(ranges).toEqual(expect.arrayContaining([
@@ -541,13 +491,10 @@ describe('Markdown projection', () => {
     expect(projection.constructs).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'fence', complete: false }),
     ]))
-    const provider = createMarkdownProvider()
-    const ranges = provider.decorate({
-      sessionId: 's' as never,
+    const ranges = decorateViaPlan({
       draft,
-      draftRev: 16,
       nativeRanges: [],
-      presentation: { focused: false, selectionStart: 0, selectionEnd: 0, activeLineStart: 0, activeLineEnd: draft.length },
+      presentation: { focused: false, selectionStart: 0, selectionEnd: 0 },
     })
     expect(ranges).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ className: 'dsh-better-composer-fence-marker-hidden' }),

@@ -56,11 +56,14 @@ export function BetterComposerSettingsCard({ settings }: BetterComposerSettingsC
           </label>
           <label className="dsh-better-composer-settings-row">
             <span className="dsh-better-composer-settings-copy">
-              <strong>Markdown 语法提示</strong>
-              <small>检查高置信度 Markdown 问题，不阻止发送。</small>
+              <strong>非焦点行语法标记</strong>
+              <small>光标离开后，Markdown 语法符号的显示方式。</small>
             </span>
-            <input aria-label="Markdown 语法提示" type="checkbox" checked={current.diagnostics}
-              onChange={event => { update('diagnostics', event.target.checked) }} />
+            <select aria-label="非焦点行语法标记" value={current.inactiveMarkerDisplay}
+              onChange={event => { update('inactiveMarkerDisplay', event.currentTarget.value as BetterComposerSettings['inactiveMarkerDisplay']) }}>
+              <option value="hide">完全隐藏（只留渲染效果）</option>
+              <option value="fade">淡化显示</option>
+            </select>
           </label>
           <label className="dsh-better-composer-settings-row">
             <span className="dsh-better-composer-settings-copy">

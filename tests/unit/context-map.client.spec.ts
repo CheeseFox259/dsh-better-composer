@@ -1,8 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { formatTokens, summarizeContextWindow } from '../../src/client/context-map.ts'
 
-function event(type: string, data: unknown) {
-  return { type: 'event', event: { type, seq: 0, time: 0, data } }
+let nextSeq = 0
+beforeEach(() => { nextSeq = 0 })
+
+function event(type: string, data: unknown, seq = nextSeq++) {
+  return { type: 'event', event: { type, seq, time: 0, data } }
 }
 
 describe('context window summary', () => {
@@ -123,15 +126,122 @@ describe('context browser model', () => {
 })
 
 describe('context browser data integrity', () => {
+  it('owns injected messages by native turn and step boundaries', async () => {
+    const { buildContextBrowser } = await import('../../src/client/context-map.ts')
+    const entries = [
+      event('turn/start', { turn: 1 }),
+      event('step/start', { turn: 1, step: 1 }),
+      event('user/message', { content: [{ type: 'text', text: 'first prompt' }], source: { kind: 'user' } }),
+      event('user/message', { content: [{ type: 'text', text: 'injected file notice' }], source: { kind: 'context' } }),
+      event('assistant/message', { turn: 1, step: 1, message: { content: [{ type: 'text', text: 'first answer' }] } }),
+      event('step/end', { turn: 1, step: 1 }),
+      event('step/start', { turn: 1, step: 2 }),
+      event('user/message', { content: [{ type: 'text', text: 'injected skill' }], source: { kind: 'context' } }),
+      event('tool/call', { turn: 1, step: 2, name: 'read' }),
+      event('tool/result', { turn: 1, step: 2, message: { content: [{ type: 'text', text: 'file contents' }] } }),
+      event('assistant/message', { turn: 1, step: 2, message: { content: [{ type: 'text', text: 'second answer' }] } }),
+      event('step/end', { turn: 1, step: 2 }),
+      event('turn/end', { turn: 1, reason: { kind: 'completed' } }),
+      event('turn/start', { turn: 2 }),
+      event('step/start', { turn: 2, step: 1 }),
+      event('user/message', { content: [{ type: 'text', text: 'second prompt' }], source: { kind: 'user' } }),
+      event('assistant/message', { turn: 2, step: 1, message: { content: [{ type: 'text', text: 'last answer' }] } }),
+      event('step/end', { turn: 2, step: 1 }),
+      event('turn/end', { turn: 2, reason: { kind: 'completed' } }),
+    ]
+
+    const summary = summarizeContextWindow(entries, 1)
+    const browser = buildContextBrowser(entries)
+
+    expect(summary.turns.map(turn => turn.index)).toEqual([1, 2])
+    expect(browser.turns.map(turn => turn.index)).toEqual([1, 2])
+    expect(browser.turns[0]?.steps.map(step => step.index)).toEqual([1, 2])
+    expect(browser.turns[0]?.steps[0]?.messages.map(message => message.role)).toEqual(['user', 'user', 'assistant'])
+    expect(browser.turns[0]?.steps[1]?.messages.map(message => message.role)).toEqual(['user', 'tool', 'assistant'])
+    expect(summary.turns[0]?.toolCalls).toBe(1)
+    expect(browser.turns[0]?.steps[1]?.toolNames).toEqual(['read'])
+  })
+
+  it('keeps source and fork seqs stable across history pages and transient entries', async () => {
+    const { buildContextBrowser } = await import('../../src/client/context-map.ts')
+    const header = event('request/header', { header: { config: { provider: 'deepseek', model: 'v4' }, tools: [{ name: 'read', description: 'Read' }] } }, 30)
+    const system = event('system/message', { turn: 4, step: 1, message: { content: [{ type: 'text', text: 'system' }] } }, 31)
+    const suffix = [
+      header,
+      system,
+      event('turn/start', { turn: 4 }, 32),
+      event('step/start', { turn: 4, step: 1 }, 33),
+      event('user/message', { content: [{ type: 'text', text: 'prompt' }], source: { kind: 'user' } }, 34),
+      { type: 'transient', event: { type: 'assistant/attempt', seq: 35 } },
+      event('assistant/message', { turn: 4, step: 1, message: { content: [{ type: 'text', text: 'answer' }] } }, 35),
+      event('step/end', { turn: 4, step: 1 }, 36),
+      event('turn/end', { turn: 4, reason: { kind: 'completed' } }, 37),
+    ]
+    const prefix = [
+      event('turn/start', { turn: 3 }, 20),
+      event('step/start', { turn: 3, step: 1 }, 21),
+      event('user/message', { content: [{ type: 'text', text: 'earlier' }], source: { kind: 'user' } }, 22),
+      event('assistant/message', { turn: 3, step: 1, message: { content: [{ type: 'text', text: 'earlier answer' }] } }, 23),
+      event('step/end', { turn: 3, step: 1 }, 24),
+      event('turn/end', { turn: 3, reason: { kind: 'completed' } }, 25),
+    ]
+    const paged = buildContextBrowser(suffix)
+    // A repeated header is the overlap of two adjacent immutable pages.
+    const complete = buildContextBrowser([...prefix, header, ...suffix])
+
+    expect(paged.turns[0]?.startSeq).toBe(32)
+    expect(paged.turns[0]?.endSeq).toBe(37)
+    expect(paged.turns[0]?.steps[0]?.startSeq).toBe(33)
+    expect(paged.turns[0]?.steps[0]?.messages.map(message => message.seq)).toEqual([34, 35])
+    expect(paged.tools[0]?.seq).toBe(30)
+    expect(paged.systemNodes[0]?.seq).toBe(31)
+    expect(complete.turns.find(turn => turn.index === 4)).toEqual(paged.turns[0])
+    expect(complete.tools).toEqual(paged.tools)
+    expect(complete.systemNodes).toEqual(paged.systemNodes)
+    expect(summarizeContextWindow([...prefix, header, ...suffix], 1).userMessages).toBe(2)
+  })
+
+  it('accepts zero boundary IDs and preserves native compaction metadata', async () => {
+    const { buildContextBrowser } = await import('../../src/client/context-map.ts')
+    const checkpoint = event('user/message', {
+      content: [{ type: 'text', text: 'checkpoint' }, { type: 'file', name: 'a.ts' }, { type: 'image' }],
+      source: { kind: 'context' },
+    })
+    const entries = [
+      event('turn/start', { turn: 0 }, 0),
+      event('step/start', { turn: 0, step: 0 }, 1),
+      { ...checkpoint, event: { ...checkpoint.event, seq: 2, surfaceOp: { op: 'replace' } } },
+      event('assistant/message', {
+        turn: 0, step: 0,
+        message: { content: [{ type: 'text', text: 'partial response' }] },
+        usage: { outputTokens: 32 }, interrupted: true,
+      }, 3),
+      event('step/end', { turn: 0, step: 0 }, 4),
+      event('turn/end', { turn: 0, reason: { kind: 'aborted', reason: 'user' } }, 5),
+    ]
+    const browser = buildContextBrowser(entries)
+    const summary = summarizeContextWindow(entries, 1)
+
+    expect(browser.turns.map(turn => turn.index)).toEqual([0])
+    expect(summary.turns.map(turn => turn.index)).toEqual([0])
+    expect(browser.turns[0]?.startSeq).toBe(0)
+    expect(browser.turns[0]?.endSeq).toBe(5)
+    expect(browser.turns[0]?.steps[0]?.index).toBe(0)
+    expect(browser.turns[0]?.steps[0]?.startSeq).toBe(1)
+    expect(browser.turns[0]?.steps[0]?.messages[0]).toMatchObject({ seq: 2, source: 'context', surfaceReplace: true, files: ['a.ts'] })
+    expect(browser.turns[0]?.steps[0]?.messages[1]).toMatchObject({ seq: 3, outputTokens: 32, interrupted: true })
+    expect(browser.compactTurns).toEqual([0])
+    expect(summary.turns[0]).toMatchObject({ fileRefs: 1, imageCount: 1, assistantTokens: 32 })
+  })
+
   it('assigns identical turn indexes and per-turn tokens in the summary and the browser', async () => {
     const { buildContextBrowser, summarizeContextWindow } = await import('../../src/client/context-map.ts')
     const entries = [
-      event('turn/start', { turn: 1 }),
       event('user/message', { turn: 1, step: 1, content: [{ type: 'text', text: 'u'.repeat(40) }] }),
       event('assistant/message', { turn: 1, step: 1, content: [{ type: 'text', text: 'a'.repeat(80) }], usage: { outputTokens: 30 } }),
       event('tool/result', { turn: 1, step: 1, content: [{ type: 'text', text: 'r'.repeat(200) }] }),
-      // No explicit turn fields: the user message must open turn 2 and the
-      // assistant answer must join it, in BOTH folds.
+      // Legacy window without native boundaries: a direct user message opens
+      // the next turn and the assistant answer joins it in both folds.
       event('user/message', { content: [{ type: 'text', text: 'v'.repeat(20) }] }),
       event('assistant/message', { content: [{ type: 'text', text: 'b'.repeat(60) }] }),
     ]
@@ -185,4 +295,17 @@ describe('context browser data integrity', () => {
     expect(step?.messages[0]?.files).toEqual(['tsconfig.json'])
     expect(step?.toolNames).toEqual(['mcp__fs__read', 'bash'])
   })
+})
+
+it('keeps native boundary identities unchanged when an older zero-ID page is added', async () => {
+  const { buildContextBrowser } = await import('../../src/client/context-map.ts')
+  const older = [event('turn/start', {turn:0},0),event('step/start',{turn:0,step:0},1),event('user/message',{content:[{type:'text',text:'older'}]},2)]
+  const suffix = [event('turn/start',{turn:3},30),event('step/start',{turn:3,step:4},31),event('user/message',{content:[{type:'text',text:'same source'}]},32)]
+  const partial = buildContextBrowser(suffix)
+  const complete = buildContextBrowser([...older,...suffix])
+  expect(partial.turns[0]?.index).toBe(3)
+  expect(complete.turns.find(turn=>turn.startSeq===30)?.index).toBe(3)
+  expect(complete.turns.find(turn=>turn.startSeq===30)?.steps[0]?.index).toBe(partial.turns[0]?.steps[0]?.index)
+  const olderStep = event('step/start',{turn:3,step:0},29)
+  expect(buildContextBrowser([olderStep,...suffix]).turns.find(turn=>turn.startSeq===30)?.steps.find(step=>step.startSeq===31)?.index).toBe(4)
 })

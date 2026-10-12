@@ -6,7 +6,7 @@ import {
 import { Config } from '../../src/index.ts'
 import { BetterComposerSettingsStore } from '../../src/client/settings-store.ts'
 import { createEnabledActions } from '../../src/commands/actions.ts'
-import { createMarkdownProvider } from '../../src/markdown/provider.ts'
+import { project } from '../../src/decoration/index.ts'
 
 describe('Better Composer settings', () => {
   it('exports the canonical existing plugin schema', () => {
@@ -18,14 +18,14 @@ describe('Better Composer settings', () => {
     expect(normalizeSettings({ enabled: false, toolbarMode: 'hidden' })).toEqual({
       enabled: false,
       markdownVisual: true,
-      diagnostics: true,
+      inactiveMarkerDisplay: 'hide',
       toolbarMode: 'hidden',
       pasteClipThreshold: 4000,
     })
   })
 
   it('keeps invalid persisted values at their safe defaults', () => {
-    expect(normalizeSettings({ enabled: 'false', markdownVisual: 0, diagnostics: null, toolbarMode: 'wide', pasteFileExtension: '.exe' })).toEqual(DEFAULT_SETTINGS)
+    expect(normalizeSettings({ enabled: 'false', markdownVisual: 0, inactiveMarkerDisplay: 'glow', toolbarMode: 'wide', pasteFileExtension: '.exe' })).toEqual(DEFAULT_SETTINGS)
   })
 
   it('tracks the scope, writes fields, and stops after disposal', async () => {
@@ -44,8 +44,8 @@ describe('Better Composer settings', () => {
     const store = new BetterComposerSettingsStore(scope)
     let updates = 0
     const off = store.subscribe(() => { updates += 1 })
-    await store.set('diagnostics', false)
-    expect(store.get()).toMatchObject({ diagnostics: false })
+    await store.set('inactiveMarkerDisplay', 'fade')
+    expect(store.get()).toMatchObject({ inactiveMarkerDisplay: 'fade' })
     expect(updates).toBe(1)
     await store.set('markdownVisual', false)
     expect(store.get()).toMatchObject({ markdownVisual: false })
@@ -55,7 +55,7 @@ describe('Better Composer settings', () => {
     expect(updates).toBe(3)
     off()
     store.dispose()
-    await set('diagnostics', true)
+    await set('inactiveMarkerDisplay', 'hide')
     expect(updates).toBe(3)
   })
 
@@ -90,14 +90,14 @@ describe('Better Composer settings', () => {
     expect(normalizeSettings({ toolbarMode: 'hidden' })).toEqual({ ...DEFAULT_SETTINGS, toolbarMode: 'hidden' })
   })
 
-  it('separates display and diagnostic settings in the provider', () => {
-    const context = { sessionId: 's' as never, draft: '# x\n`bad', draftRev: 1, nativeRanges: [], presentation: { focused: false, selectionStart: 0, selectionEnd: 0, activeLineStart: 0, activeLineEnd: 0 } }
-    expect(createMarkdownProvider(() => ({ ...DEFAULT_SETTINGS, markdownVisual: true })).decorate(context)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ className: 'dsh-better-composer-heading' }),
-    ]))
-    expect(createMarkdownProvider(() => ({ ...DEFAULT_SETTINGS, diagnostics: false })).decorate(context)).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ layer: 'diagnostic' }),
-    ]))
-    expect(createMarkdownProvider(() => ({ ...DEFAULT_SETTINGS, enabled: false })).decorate(context)).toEqual([])
+  it('separates the visual toggle from the projection in the provider', () => {
+    const draft = '# x\n`bad'
+    const planVisual = project(draft, { start: 0, end: 0, focused: false }, [], { markdownVisual: true })
+    expect(planVisual.lines[0]?.signature).toContain('dsh-better-composer-heading')
+    expect(planVisual.inlines.length).toBeGreaterThan(0)
+
+    const planDisabled = project(draft, { start: 0, end: 0, focused: false }, [], { markdownVisual: false })
+    expect(planDisabled.inlines).toEqual([])
+    expect(planDisabled.lines.every(l => l.signature === '')).toBe(true)
   })
 })
